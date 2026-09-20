@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+DIR="$HOME/Изображения/Wallpaper"
+STATE="$HOME/.cache/wallpaper_index"
+
+mapfile -t FILES < <(find "$DIR" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | sort)
+COUNT=${#FILES[@]}
+
+[ "$COUNT" -eq 0 ] && exit 1
+
+INDEX=0
+[ -f "$STATE" ] && INDEX=$(cat "$STATE")
+
+INDEX=$(( (INDEX - 1 + COUNT) % COUNT ))
+
+echo "$INDEX" > "$STATE"
+
+plasma-apply-wallpaperimage "${FILES[$INDEX]}"
+
