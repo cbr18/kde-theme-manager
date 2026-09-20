@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+
+DIR="$HOME/Изображения/Wallpaper"
+STATE="$HOME/.cache/wallpaper_index"
+THUMB_DIR="$HOME/.cache/wallpaper-picker"
+
+COLUMNS=4
+IMAGE_SIZE=210
+THUMB_WIDTH=420
+THUMB_HEIGHT=260
+THUMB_RADIUS=18
+THUMB_VERSION="rounded-v1"
+
+mkdir -p "$THUMB_DIR"
+
+mapfile -t FILES < <(
+    find "$DIR" -maxdepth 1 -type f \
+        \( \
+            -iname '*.jpg' \
+            -o -iname '*.jpeg' \
+            -o -iname '*.png' \
+            -o -iname '*.webp' \
+        \) |
+        sort
+)
+
+COUNT=${#FILES[@]}
+
+[ "$COUNT" -eq 0 ] && exit 1
+
+ENTRIES=""
+DISPLAYED_FILES=()
+
+for file in "${FILES[@]}"; do
+    name="$(basename "$file")"
+
+    hash="$(
+        printf '%s\0%s' "$file" "$THUMB_VERSION" |
+            sha256sum |
+            cut -d' ' -f1
+    )"
+
+    thumb="$THUMB_DIR/$hash.png"
+
+    if [ ! -f "$thumb" ] || [ "$file" -nt "$thumb" ]; then
+        if ! magick "$file" \
+            -thumbnail "${THUMB_WIDTH}x${THUMB_HEIGHT}^" \
+            -gravity center \
+            -extent "${THUMB_WIDTH}x${THUMB_HEIGHT}" \
+            \( -size "${THUMB_WIDTH}x${THUMB_HEIGHT}" xc:none \
+                -fill white \
+                -draw "roundrectangle 0,0,$((THUMB_WIDTH - 1)),$((THUMB_HEIGHT - 1)),$THUMB_RADIUS,$THUMB_RADIUS" \
+            \) \
+            -alpha set \
+            -compose DstIn \
+            -composite \
+            "$thumb" 2>/dev/null; then
+
+            rm -f "$thumb"
+            continue
+        fi
+    fi
+
+    DISPLAYED_FILES+=("$file")
+
+    ENTRIES+="img:${thumb}:text:${name}\n"
+done
+
+[ "${#DISPLAYED_FILES[@]}" -eq 0 ] && exit 1
+
+SELECTED_INDEX=$(
+    printf '%b' "$ENTRIES" |
+        wofi \
+            --dmenu \
+            --allow-images \
+            --insensitive \
+            --width 40% \
+            --height 60% \
+            --columns "$COLUMNS" \
+            --define image_size="$IMAGE_SIZE" \
+            --define content_halign=center \
+            --define dmenu-print_line_num=true \
+            --style "$HOME/.config/wofi/wallpaper.css"
+)
+
+[ -z "$SELECTED_INDEX" ] && exit 0
+
+SELECTED_FILE="${DISPLAYED_FILES[$SELECTED_INDEX]}"
+
+[ -z "$SELECTED_FILE" ] && exit 1
+
+for i in "${!FILES[@]}"; do
+    if [ "${FILES[$i]}" = "$SELECTED_FILE" ]; then
+        echo "$i" > "$STATE"
+        break
+    fi
+done
+
+plasma-apply-wallpaperimage "$SELECTED_FILE"

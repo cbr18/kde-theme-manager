@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+THEME_PROFILE="${THEME_PROFILE:-$HOME/.local/bin/theme-profile}"
+ROOT="$HOME/.config/theme-profile"
+PROFILES="$ROOT/profiles"
+STYLE="$HOME/.config/wofi/style.css"
+
+wofi_menu() {
+  local prompt="$1"
+  local width="${2:-360}"
+  local height="${3:-260}"
+
+  wofi \
+    --dmenu \
+    --insensitive \
+    --prompt "$prompt" \
+    --width "$width" \
+    --height "$height" \
+    --style "$STYLE"
+}
+
+active_profile="$("$THEME_PROFILE" status 2>/dev/null | sed -n 's/^active_profile=//p' | head -1)"
+active_profile="${active_profile:-unknown}"
+
+profiles_with_active_marker() {
+  local profile
+  "$THEME_PROFILE" list | while IFS= read -r profile; do
+    [ -n "$profile" ] || continue
+    if [ "$profile" = "$active_profile" ]; then
+      printf '%s  [active]\n' "$profile"
+    else
+      printf '%s\n' "$profile"
+    fi
+  done
+}
+
+choose_profile() {
+  local prompt="$1"
+  local choice
+
+  choice="$(profiles_with_active_marker | wofi_menu "$prompt" 360 260)"
+  [ -n "$choice" ] || exit 0
+  printf '%s\n' "${choice%% *}"
+}
+
+ask_profile_name() {
+  local name
+
+  name="$(printf '%s\n' "$active_profile" | wofi_menu "Save as profile name" 420 120)"
+  [ -n "$name" ] || exit 0
+  printf '%s\n' "$name"
+}
+
+action="$(
+  {
+    printf 'Apply profile\n'
+    printf 'Save as\n'
+    printf 'Open profile folder\n'
+    printf 'Restart Plasma Shell\n'
+    printf 'Status\n'
+    printf 'Cancel\n'
+  } | wofi_menu "Theme: ${active_profile}" 380 260
+)"
+
+[ -n "$action" ] || exit 0
+
+case "$action" in
+  "Apply profile")
+    profile="$(choose_profile "Apply profile")"
+    "$THEME_PROFILE" apply "$profile"
+    ;;
+  "Save as")
+    profile="$(ask_profile_name)"
+    "$THEME_PROFILE" save "$profile"
+    ;;
+  "Open profile folder")
+    mkdir -p "$PROFILES"
+    if command -v dolphin >/dev/null 2>&1; then
+      dolphin "$PROFILES" >/dev/null 2>&1 &
+    else
+      xdg-open "$PROFILES" >/dev/null 2>&1 &
+    fi
+    ;;
+  "Restart Plasma Shell")
+    systemctl --user restart plasma-plasmashell.service
+    ;;
+  "Status")
+    "$THEME_PROFILE" status
+    ;;
+  "Cancel")
+    exit 0
+    ;;
+esac
