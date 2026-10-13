@@ -13,22 +13,15 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterSingletonInstance
-from PySide6.QtCore import QUrl, QCoreApplication, Qt, QTimer
+from PySide6.QtCore import QUrl, QCoreApplication, Qt
 from PySide6.QtQuickControls2 import QQuickStyle
 
 # Импорт контроллеров
 from controllers import MainController, register_controllers
 from theme_controller import register_theme_controller
 
-# Регистрация мета-типов для QML
-from PySide6.QtCore import qRegisterMetaType
+# Регистрация мета-типов для QML (not needed in PySide6, Python types auto-registered)
 from core.protocol import Result, ProfileInfo, Component, AppStatus, AppSettings
-
-qRegisterMetaType(Result)
-qRegisterMetaType(ProfileInfo)
-qRegisterMetaType(Component)
-qRegisterMetaType(AppStatus)
-qRegisterMetaType(AppSettings)
 
 
 def main() -> int:
@@ -66,8 +59,13 @@ def main() -> int:
 
     main_controller.profile.activeProfileChanged.connect(sync_theme)
 
+    # Инициализация контроллеров ДО загрузки QML
+    main_controller.initialize()
+
     # Добавление путей для QML импортов
     qml_path = Path(__file__).parent.parent / "qml"
+    qt_app_path = Path(__file__).parent.parent
+    engine.addImportPath(str(qt_app_path))  # For Components module
     engine.addImportPath(str(qml_path))
 
     # Загрузка главной QML
@@ -76,13 +74,12 @@ def main() -> int:
 
     if not engine.rootObjects():
         print("Failed to load QML", file=sys.stderr)
+        try:
+            for error in engine.errors():
+                print(f"  QML Error: {error}", file=sys.stderr)
+        except AttributeError:
+            pass
         return 1
-
-    # Инициализация контроллеров после загрузки QML
-    def init_controllers():
-        main_controller.initialize()
-
-    QTimer.singleShot(0, init_controllers)
 
     return app.exec()
 

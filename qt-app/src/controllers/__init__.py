@@ -10,14 +10,14 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer
 
-from .core.protocol import (
+from core.protocol import (
     ProfileCore, WallpaperCore, TrackedAppsCore, SettingsCore,
     ProfileInfo, Component, AppStatus, Result, AppSettings
 )
-from .core.python_core import (
+from core.python_core import (
     PythonProfileCore, PythonWallpaperCore, PythonTrackedAppsCore, PythonSettingsCore
 )
-from .core import CoreFactory
+from core import CoreFactory
 
 
 # ──────────────────────────────────────────────────────────────
@@ -456,18 +456,34 @@ class MainController(QObject):
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
-        self.profile = ProfileController(self)
-        self.wallpaper = WallpaperController(self)
-        self.tracked_apps = TrackedAppsController(self)
-        self.settings = SettingsController(self)
+        self._profile = ProfileController(self)
+        self._wallpaper = WallpaperController(self)
+        self._tracked_apps = TrackedAppsController(self)
+        self._settings = SettingsController(self)
+
+    @Property(QObject, constant=True)
+    def profile(self):
+        return self._profile
+
+    @Property(QObject, constant=True)
+    def wallpaper(self):
+        return self._wallpaper
+
+    @Property(QObject, constant=True)
+    def tracked_apps(self):
+        return self._tracked_apps
+
+    @Property(QObject, constant=True)
+    def settings(self):
+        return self._settings
 
     @Slot()
     def initialize(self) -> None:
         """Инициализация всех контроллеров."""
-        self.profile.refresh()
-        self.wallpaper.refresh()
-        self.tracked_apps.refresh()
-        self.settings.load()
+        self._profile.refresh()
+        self._wallpaper.refresh()
+        self._tracked_apps.refresh()
+        self._settings.load()
 
 
 # ──────────────────────────────────────────────────────────────
@@ -476,8 +492,15 @@ class MainController(QObject):
 
 def register_controllers(engine) -> None:
     """Зарегистрировать контроллеры в QML engine."""
-    from PySide6.QtQml import qmlRegisterSingletonInstance
-    
     main_ctrl = MainController()
-    qmlRegisterSingletonInstance("KDEThemeManager", 1, 0, "MainController", main_ctrl)
+    
+    # Register main controller
+    engine.rootContext().setContextProperty("mainController", main_ctrl)
+    
+    # Register sub-controllers as separate context properties for direct access
+    engine.rootContext().setContextProperty("profileController", main_ctrl._profile)
+    engine.rootContext().setContextProperty("wallpaperController", main_ctrl._wallpaper)
+    engine.rootContext().setContextProperty("trackedAppsController", main_ctrl._tracked_apps)
+    engine.rootContext().setContextProperty("settingsController", main_ctrl._settings)
+    
     return main_ctrl

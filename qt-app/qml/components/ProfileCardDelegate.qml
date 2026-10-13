@@ -1,4 +1,5 @@
 import QtQuick
+import org.kde.kirigami.platform as Platform
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami 2.20 as Kirigami
@@ -6,19 +7,25 @@ import org.kde.kirigami 2.20 as Kirigami
 Kirigami.AbstractCard {
     id: card
     Layout.fillWidth: true
+
+    // Extract components array for use in Flow
+    property var compList: (model.components || [])
+    property var firstComponents: compList.slice(0, 8)
+    property var hasMore: compList.length > 8
+
     contentItem: ColumnLayout {
         Layout.fillWidth: true
-        spacing: Kirigami.Units.smallSpacing
+        spacing: Platform.Units.smallSpacing
 
         // Header
         RowLayout {
             Layout.fillWidth: true
-            spacing: Kirigami.Units.mediumSpacing
+            spacing: Platform.Units.mediumSpacing
 
             Kirigami.Icon {
                 source: "preferences-desktop-theme"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.large
-                Layout.preferredHeight: Kirigami.Units.iconSizes.large
+                Layout.preferredWidth: Platform.Units.iconSizes.large
+                Layout.preferredHeight: Platform.Units.iconSizes.large
                 color: Kirigami.Theme.highlightColor
             }
 
@@ -27,15 +34,15 @@ Kirigami.AbstractCard {
                 spacing: 2
 
                 Label {
-                    text: model.name === "glass" ? i18n("Glass") :
-                          model.name === "paper" ? i18n("Paper") : model.name
+                    text: model.name === "glass" ? qsTr("Glass") :
+                          model.name === "paper" ? qsTr("Paper") : model.name
                     font.bold: true
-                    font.pointSize: Kirigami.Units.fontSizes.medium
+                    font.pointSize: Platform.Units.mediumSpacing
                 }
 
                 Label {
-                    text: i18n("%1 components", model.componentCount)
-                    font.pointSize: Kirigami.Units.fontSizes.small
+                    text: qsTr("%1 components").arg(model.componentCount)
+                    font.pointSize: Platform.Units.smallSpacing
                     color: Kirigami.Theme.textColor
                     opacity: 0.7
                 }
@@ -48,9 +55,8 @@ Kirigami.AbstractCard {
                 source: "dialog-ok-apply"
                 visible: model.isActive
                 color: Kirigami.Theme.positiveTextColor
-                Layout.preferredWidth: Kirigami.Units.iconSizes.medium
-                Layout.preferredHeight: Kirigami.Units.iconSizes.medium
-                tooltip: i18n("Active profile")
+                Layout.preferredWidth: Platform.Units.iconSizes.medium
+                Layout.preferredHeight: Platform.Units.iconSizes.medium
             }
         }
 
@@ -59,24 +65,24 @@ Kirigami.AbstractCard {
             Layout.fillWidth: true
             spacing: 4
             Repeater {
-                model: model.components.slice(0, 8)
+                model: firstComponents
                 delegate: Kirigami.Chip {
                     text: modelData
-                    icon.source: getComponentIcon(modelData)
+                    icon.name: getComponentIcon(modelData)
                     closable: false
                 }
             }
             Loader {
                 // +N more
-                sourceComponent: model.components.length > 8 ? moreChip : null
+                sourceComponent: hasMore ? moreChip : null
             }
         }
 
         Component {
             id: moreChip
             Kirigami.Chip {
-                text: "+" + (model.components.length - 8)
-                icon.source: "view-more"
+                text: "+" + (card.compList.length - 8)
+                icon.name: "view-more"
             }
         }
 
@@ -85,22 +91,22 @@ Kirigami.AbstractCard {
             Layout.fillWidth: true
             Item { Layout.fillWidth: true }
 
-            Kirigami.IconButton {
-                icon.source: model.isActive ? "view-refresh" : "dialog-ok-apply"
-                tooltip: model.isActive ? i18n("Reapply") : i18n("Apply")
+            Button {
+                icon.name: model.isActive ? "view-refresh" : "dialog-ok-apply"
+                flat: true
                 onClicked: applyClicked(model.name)
             }
 
-            Kirigami.IconButton {
-                icon.source: "document-properties"
-                tooltip: i18n("Diff with active")
+            Button {
+                icon.name: "document-properties"
+                flat: true
                 visible: !model.isActive
                 onClicked: diffClicked(model.name)
             }
 
-            Kirigami.IconButton {
-                icon.source: "edit-delete"
-                tooltip: i18n("Delete")
+            Button {
+                icon.name: "edit-delete"
+                flat: true
                 visible: !model.isActive
                 onClicked: deleteClicked(model.name)
             }
@@ -112,8 +118,8 @@ Kirigami.AbstractCard {
     signal diffClicked(string profileName)
     signal deleteClicked(string profileName)
 
-    function getComponentIcon(compId: string): string {
-        const icons: Record<string, string> = {
+    function getComponentIcon(compId) {
+        const icons = {
             "kwin": "preferences-system-windows",
             "plasma_shell": "plasma",
             "kdeglobals": "preferences-desktop-theme",

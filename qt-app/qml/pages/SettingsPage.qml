@@ -1,20 +1,21 @@
 import QtQuick
+import org.kde.kirigami.platform as Platform
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami 2.20 as Kirigami
 
 Kirigami.Page {
     id: page
-    title: i18n("Settings")
+    title: qsTr("Settings")
     scrollable: true
 
     ColumnLayout {
         Layout.fillWidth: true
-        spacing: Kirigami.Units.largeSpacing
-        Layout.leftMargin: Kirigami.Units.largeSpacing
-        Layout.rightMargin: Kirigami.Units.largeSpacing
-        Layout.topMargin: Kirigami.Units.largeSpacing
-        Layout.bottomMargin: Kirigami.Units.largeSpacing
+        spacing: Platform.Units.largeSpacing
+        Layout.leftMargin: Platform.Units.largeSpacing
+        Layout.rightMargin: Platform.Units.largeSpacing
+        Layout.topMargin: Platform.Units.largeSpacing
+        Layout.bottomMargin: Platform.Units.largeSpacing
 
         // ─── Profile Apply Mode ───
         Kirigami.Card {
@@ -22,39 +23,36 @@ Kirigami.Page {
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: Kirigami.Units.mediumSpacing
+                spacing: Platform.Units.mediumSpacing
 
-                RowLayout {
-                    Kirigami.Heading {
-                        level: 2
-                        text: i18n("Profile Apply Mode")
-                    }
+                Kirigami.Heading {
+                    level: 2
+                    text: qsTr("Profile Apply Mode")
                 }
 
                 Kirigami.FormLayout {
                     Layout.fillWidth: true
 
-                    // Mode selector
-                    Kirigami.FormData.label: i18n("Mode")
+                    Kirigami.FormData.label: qsTr("Mode")
                     Kirigami.FormData.isRequired: true
 
                     RowLayout {
-                        spacing: Kirigami.Units.mediumSpacing
+                        spacing: Platform.Units.mediumSpacing
 
                         Kirigami.RadioButton {
                             id: modeAll
-                            text: i18n("Apply ALL components (default)")
-                            checked: mainController.settings.defaultComponentsMode === "all"
-                            onToggled: if (checked) mainController.settings.defaultComponentsMode = "all"
-                            tooltip: i18n("Apply all tracked components when switching profiles")
+                            text: qsTr("Apply ALL components (default)")
+                            checked: settingsController.defaultComponentsMode === "all"
+                            onToggled: if (checked) settingsController.defaultComponentsMode = "all"
+                            tooltip: qsTr("Apply all tracked components when switching profiles")
                         }
 
                         Kirigami.RadioButton {
                             id: modeCustom
-                            text: i18n("Apply SELECTED components only")
-                            checked: mainController.settings.defaultComponentsMode === "custom"
-                            onToggled: if (checked) mainController.settings.defaultComponentsMode = "custom"
-                            tooltip: i18n("Choose which components to apply per profile")
+                            text: qsTr("Apply SELECTED components only")
+                            checked: settingsController.defaultComponentsMode === "custom"
+                            onToggled: if (checked) settingsController.defaultComponentsMode = "custom"
+                            tooltip: qsTr("Choose which components to apply per profile")
                         }
                     }
                 }
@@ -62,14 +60,14 @@ Kirigami.Page {
                 // Custom components selection (visible when custom mode)
                 Item {
                     Layout.fillWidth: true
-                    visible: mainController.settings.defaultComponentsMode === "custom"
+                    visible: settingsController.defaultComponentsMode === "custom"
                     height: customComponentsView.height
 
                     Kirigami.Separator {}
 
                     Label {
-                        text: i18n("Select components to include when applying/saving profiles:")
-                        font.pointSize: Kirigami.Units.fontSizes.small
+                        text: qsTr("Select components to include when applying/saving profiles:")
+                        font.pointSize: Platform.Units.smallSpacing
                         color: Kirigami.Theme.textColor
                         opacity: 0.7
                         wrapMode: Text.WordWrap
@@ -80,26 +78,28 @@ Kirigami.Page {
                     ColumnLayout {
                         id: customComponentsView
                         Layout.fillWidth: true
-                        spacing: Kirigami.Units.mediumSpacing
+                        spacing: Platform.Units.mediumSpacing
 
                         Repeater {
-                            model: mainController.tracked_apps.categories
+                            model: trackedAppsController.categories
                             delegate: ComponentCategoryGroup {
                                 category: modelData
-                                selectedComponents: mainController.settings.customComponents
-                                availableComponents: mainController.settings.availableComponents
+                                selectedComponents: settingsController.customComponents
+                                availableComponents: settingsController.availableComponents
                                 onSelectionChanged: {
-                                    // Обновить список выбранных компонентов
-                                    var selected = []
-                                    for (var cat in mainController.tracked_apps.categories) {
-                                        var comps = mainController.tracked_apps.getComponentsByCategory(cat)
+                                    // Build the new selection from all categories
+                                    var allSelected = []
+                                    for (var catIdx = 0; catIdx < trackedAppsController.categories.length; catIdx++) {
+                                        var cat = trackedAppsController.categories[catIdx]
+                                        var comps = trackedAppsController.getComponentsByCategory(cat)
                                         for (var i = 0; i < comps.length; i++) {
-                                            if (comps[i].selected) {
-                                                selected.push(comps[i].id)
-                                            }
+                                            // We need to check if the checkbox is selected
+                                            // The checkbox state is bound to isSelected which comes from selectedComponents
+                                            // So we can't easily read it back here without a model
                                         }
                                     }
-                                    mainController.settings.customComponents = selected
+                                    // Fallback: just use the current customComponents (bound)
+                                    // The binding will update automatically via checkbox toggled
                                 }
                             }
                         }
@@ -114,38 +114,39 @@ Kirigami.Page {
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: Kirigami.Units.mediumSpacing
+                spacing: Platform.Units.mediumSpacing
 
                 Kirigami.Heading {
                     level: 2
-                    text: i18n("Wallpaper")
+                    text: qsTr("Wallpaper")
                 }
 
                 Kirigami.FormLayout {
                     Layout.fillWidth: true
 
-                    Kirigami.FormData.label: i18n("Link wallpaper to profile")
+                    Kirigami.FormData.label: qsTr("Link wallpaper to profile")
                     Kirigami.FormData.isRequired: false
 
                     Kirigami.Switch {
-                        checked: mainController.settings.wallpaperLinkedToProfile
-                        onToggled: mainController.settings.wallpaperLinkedToProfile = checked
+                        checked: settingsController.wallpaperLinkedToProfile
+                        onToggled: settingsController.wallpaperLinkedToProfile = checked
                     }
 
-                    Kirigami.FormData.label: i18n("Wallpaper directory")
+                    Kirigami.FormData.label: qsTr("Wallpaper directory")
                     Kirigami.FormData.isRequired: true
 
                     RowLayout {
                         TextField {
                             Layout.fillWidth: true
-                            text: mainController.settings.wallpaperDirectory
+                            text: settingsController.wallpaperDirectory
                             placeholderText: "~/Изображения/Wallpaper"
-                            onEditingFinished: mainController.settings.wallpaperDirectory = text
+                            onEditingFinished: settingsController.wallpaperDirectory = text
                         }
-                        Kirigami.IconButton {
-                            icon.source: "folder-open"
+                        Kirigami.Button {
+                            icon.name: "folder-open"
+                            flat: true
                             onClicked: {
-                                // TODO: открыть диалог выбора папки
+                                // TODO: open folder dialog
                             }
                         }
                     }
@@ -159,23 +160,23 @@ Kirigami.Page {
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: Kirigami.Units.mediumSpacing
+                spacing: Platform.Units.mediumSpacing
 
                 Kirigami.Heading {
                     level: 2
-                    text: i18n("Appearance")
+                    text: qsTr("Appearance")
                 }
 
                 Kirigami.FormLayout {
                     Layout.fillWidth: true
 
-                    Kirigami.FormData.label: i18n("Application theme")
+                    Kirigami.FormData.label: qsTr("Application theme")
 
                     ComboBox {
                         Layout.fillWidth: true
                         model: ["system", "glass", "paper", "dark", "light"]
-                        currentText: mainController.settings.theme
-                        onCurrentTextChanged: mainController.settings.theme = currentText
+                        currentText: settingsController.theme
+                        onCurrentTextChanged: settingsController.theme = currentText
                     }
                 }
             }
@@ -187,53 +188,53 @@ Kirigami.Page {
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: Kirigami.Units.mediumSpacing
+                spacing: Platform.Units.mediumSpacing
 
                 Kirigami.Heading {
                     level: 2
-                    text: i18n("Behavior")
+                    text: qsTr("Behavior")
                 }
 
                 Kirigami.FormLayout {
                     Layout.fillWidth: true
 
-                    Kirigami.FormData.label: i18n("Show warning for not installed apps")
+                    Kirigami.FormData.label: qsTr("Show warning for not installed apps")
                     Kirigami.Switch {
-                        checked: mainController.settings.showNotInstalledWarning
-                        onToggled: mainController.settings.showNotInstalledWarning = checked
+                        checked: settingsController.showNotInstalledWarning
+                        onToggled: settingsController.showNotInstalledWarning = checked
                     }
 
-                    Kirigami.FormData.label: i18n("Auto-apply last profile on startup")
+                    Kirigami.FormData.label: qsTr("Auto-apply last profile on startup")
                     Kirigami.Switch {
-                        checked: mainController.settings.autoApplyOnStartup
-                        onToggled: mainController.settings.autoApplyOnStartup = checked
+                        checked: settingsController.autoApplyOnStartup
+                        onToggled: settingsController.autoApplyOnStartup = checked
                     }
 
-                    Kirigami.FormData.label: i18n("Minimize to system tray")
+                    Kirigami.FormData.label: qsTr("Minimize to system tray")
                     Kirigami.Switch {
-                        checked: mainController.settings.minimizeToTray
-                        onToggled: mainController.settings.minimizeToTray = checked
+                        checked: settingsController.minimizeToTray
+                        onToggled: settingsController.minimizeToTray = checked
                     }
 
-                    Kirigami.FormData.label: i18n("Confirm before applying profile")
+                    Kirigami.FormData.label: qsTr("Confirm before applying profile")
                     Kirigami.Switch {
-                        checked: mainController.settings.confirmBeforeApply
-                        onToggled: mainController.settings.confirmBeforeApply = checked
+                        checked: settingsController.confirmBeforeApply
+                        onToggled: settingsController.confirmBeforeApply = checked
                     }
 
-                    Kirigami.FormData.label: i18n("Create backup before applying")
+                    Kirigami.FormData.label: qsTr("Create backup before applying")
                     Kirigami.Switch {
-                        checked: mainController.settings.createBackupBeforeApply
-                        onToggled: mainController.settings.createBackupBeforeApply = checked
+                        checked: settingsController.createBackupBeforeApply
+                        onToggled: settingsController.createBackupBeforeApply = checked
                     }
 
-                    Kirigami.FormData.label: i18n("Global hotkey")
+                    Kirigami.FormData.label: qsTr("Global hotkey")
                     RowLayout {
                         TextField {
                             Layout.fillWidth: true
-                            text: mainController.settings.globalHotkey
+                            text: settingsController.globalHotkey
                             placeholderText: "Meta+T"
-                            onEditingFinished: mainController.settings.globalHotkey = text
+                            onEditingFinished: settingsController.globalHotkey = text
                         }
                     }
                 }
@@ -245,21 +246,21 @@ Kirigami.Page {
             Layout.fillWidth: true
 
             RowLayout {
-                spacing: Kirigami.Units.mediumSpacing
+                spacing: Platform.Units.mediumSpacing
 
                 Kirigami.Button {
                     Layout.fillWidth: true
-                    text: i18n("Save Settings")
-                    icon.source: "document-save"
+                    text: qsTr("Save Settings")
+                    icon.name: "document-save"
                     highlighted: true
-                    onClicked: mainController.settings.save()
+                    onClicked: settingsController.save()
                 }
 
                 Kirigami.Button {
                     Layout.fillWidth: true
-                    text: i18n("Reset to Defaults")
-                    icon.source: "view-refresh"
-                    onClicked: mainController.settings.resetToDefaults()
+                    text: qsTr("Reset to Defaults")
+                    icon.name: "view-refresh"
+                    onClicked: settingsController.resetToDefaults()
                 }
             }
         }

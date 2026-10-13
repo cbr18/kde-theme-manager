@@ -184,7 +184,5 @@ class ThemeController(QObject):
 def register_theme_controller(engine) -> ThemeController:
     """Зарегистрировать ThemeController в QML."""
     controller = ThemeController.instance()
-    qmlRegisterSingletonInstance(
-        "KDEThemeManager", 1, 0, "ThemeController", controller
-    )
+    engine.rootContext().setContextProperty("themeController", controller)
     return controller

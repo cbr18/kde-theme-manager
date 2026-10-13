@@ -1,12 +1,16 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls 2.15
 import QtQuick.Layouts
 import org.kde.kirigami 2.20 as Kirigami
-import org.kde.kirigami.addons 1.0 as KirigamiAddons
+import org.kde.kirigami.platform as Platform
+import QtQml.Models 2.1
+import Components 1.0
+import QtQuick.Controls.Basic
 
 Kirigami.ApplicationWindow {
     id: root
-    title: i18n("Theme Profile Manager")
+    title: qsTr("Theme Profile Manager")
     width: 720
     height: 560
     minimumWidth: 600
@@ -21,96 +25,95 @@ Kirigami.ApplicationWindow {
 
     pageStack.initialPage: Kirigami.Page {
         id: mainPage
-        title: i18n("Theme Profiles")
+        title: qsTr("Theme Profiles")
 
         Kirigami.ScrollablePage {
-            columnLayout: true
 
             // ─── Header: Active Profile ───
             Kirigami.Card {
                 Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                Layout.rightMargin: Kirigami.Units.largeSpacing
-                Layout.topMargin: Kirigami.Units.largeSpacing
+                Layout.leftMargin: Platform.Units.largeSpacing
+                Layout.rightMargin: Platform.Units.largeSpacing
+                Layout.topMargin: Platform.Units.largeSpacing
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
+                    spacing: Platform.Units.smallSpacing
 
                     RowLayout {
                         Layout.fillWidth: true
                         Kirigami.Heading {
                             level: 2
-                            text: i18n("Active Profile")
+                            text: qsTr("Active Profile")
                         }
                         Item { Layout.fillWidth: true }
-                        Kirigami.IconButton {
-                            icon.source: "view-refresh"
-                            onClicked: mainController.profile.refresh()
-                            tooltip: i18n("Refresh profiles")
+                        Button {
+                            icon.name: "view-refresh"
+                            flat: true
+                            onClicked: profileController.refresh()
                         }
                     }
 
                     RowLayout {
-                        spacing: Kirigami.Units.mediumSpacing
-                        Repeater {
-                            model: mainController.profile.profiles
-                            delegate: ProfileRadioButton {
-                                profileName: model.name
-                                isActive: model.isActive
-                                componentCount: model.componentCount
-                                onClicked: {
-                                    if (!model.isActive) {
-                                        mainController.profile.applyProfile(model.name)
-                                    }
-                                }
-                            }
-                        }
-                    }
+    spacing: Platform.Units.mediumSpacing
+    Repeater {
+        model: profileController.profiles
+        delegate: ProfileRadioButton {
+            profileName: model.name
+            isActive: model.isActive
+            componentCount: model.componentCount
+            onProfileClicked: {
+                if (!model.isActive) {
+                    profileController.applyProfile(model.name)
+                }
+            }
+        }
+    }
+}
                 }
             }
 
             // ─── Profiles Grid ───
             Kirigami.Card {
                 Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                Layout.rightMargin: Kirigami.Units.largeSpacing
-                Layout.topMargin: Kirigami.Units.mediumSpacing
+                Layout.leftMargin: Platform.Units.largeSpacing
+                Layout.rightMargin: Platform.Units.largeSpacing
+                Layout.topMargin: Platform.Units.mediumSpacing
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
+                    spacing: Platform.Units.smallSpacing
 
                     RowLayout {
                         Kirigami.Heading {
                             level: 3
-                            text: i18n("Available Profiles")
+                            text: qsTr("Available Profiles")
                         }
                         Item { Layout.fillWidth: true }
-                        Kirigami.IconButton {
-                            icon.source: "list-add"
+                        Button {
+                            icon.name: "list-add"
+                            flat: true
                             onClicked: showSaveDialog()
-                            tooltip: i18n("Save current as new profile")
                         }
                     }
 
                     Kirigami.CardsListView {
                         Layout.fillWidth: true
                         Layout.minimumHeight: 180
-                        model: mainController.profile.profiles
+                        model: profileController.profiles
                         delegate: ProfileCardDelegate {
-                            onApplyClicked: mainController.profile.applyProfile(model.name)
+                            onApplyClicked: profileController.applyProfile(model.name)
                             onDeleteClicked: {
-                                if (mainController.settings.confirmBeforeApply) {
-                                    confirmDialog.text = i18n("Delete profile \"%1\"?", model.name)
+                                if (settingsController.confirmBeforeApply) {
+                                    confirmDialog.text = qsTr("Delete profile \"%1\"?", model.name)
                                     confirmDialog.open()
                                 } else {
-                                    mainController.profile.deleteProfile(model.name)
+                                    profileController.deleteProfile(model.name)
                                 }
                             }
                             onDiffClicked: {
                                 diffDialog.profileA = model.name
-                                diffDialog.profileB = mainController.profile.activeProfile
+                                diffDialog.profileB = profileController.activeProfile
                                 diffDialog.open()
                             }
                         }
@@ -121,25 +124,25 @@ Kirigami.ApplicationWindow {
             // ─── Wallpaper Section ───
             Kirigami.Card {
                 Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                Layout.rightMargin: Kirigami.Units.largeSpacing
-                Layout.topMargin: Kirigami.Units.mediumSpacing
-                Layout.bottomMargin: Kirigami.Units.largeSpacing
+                Layout.leftMargin: Platform.Units.largeSpacing
+                Layout.rightMargin: Platform.Units.largeSpacing
+                Layout.topMargin: Platform.Units.mediumSpacing
+                Layout.bottomMargin: Platform.Units.largeSpacing
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
+                    spacing: Platform.Units.smallSpacing
 
                     RowLayout {
                         Kirigami.Heading {
                             level: 3
-                            text: i18n("Wallpaper")
+                            text: qsTr("Wallpaper")
                         }
                         Item { Layout.fillWidth: true }
-                        Kirigami.IconButton {
-                            icon.source: "view-refresh"
-                            onClicked: mainController.wallpaper.refresh()
-                            tooltip: i18n("Refresh wallpaper list")
+                        Button {
+                            icon.name: "view-refresh"
+                            flat: true
+                            onClicked: wallpaperController.refresh()
                         }
                     }
 
@@ -147,18 +150,13 @@ Kirigami.ApplicationWindow {
                     Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 120
-                        visible: mainController.wallpaper.currentWallpaper !== ""
+                        visible: wallpaperController.currentWallpaper !== ""
 
                         Image {
                             id: wallpaperPreview
-                            source: mainController.wallpaper.currentWallpaper
+                            source: wallpaperController.currentWallpaper
                             fillMode: Image.PreserveAspectCrop
                             anchors.fill: parent
-                            layer.enabled: true
-                            layer.effect: FastBlur {
-                                radius: 8
-                                transparentBorder: true
-                            }
                         }
 
                         Rectangle {
@@ -179,28 +177,28 @@ Kirigami.ApplicationWindow {
 
                     // Wallpaper controls
                     RowLayout {
-                        spacing: Kirigami.Units.mediumSpacing
+                        spacing: Platform.Units.mediumSpacing
 
-                        Kirigami.Button {
+                        Button {
                             Layout.fillWidth: true
-                            text: i18n("Previous")
-                            icon.source: "go-previous"
-                            onClicked: mainController.wallpaper.prevWallpaper()
+                            text: qsTr("Previous")
+                            icon.name: "go-previous-view"
+                            onClicked: wallpaperController.prevWallpaper()
                         }
 
-                        Kirigami.Button {
+                        Button {
                             Layout.fillWidth: true
-                            text: i18n("Pick Wallpaper...")
-                            icon.source: "image-x-generic"
+                            text: qsTr("Pick Wallpaper...")
+                            icon.name: "image-x-generic"
                             highlighted: true
-                            onClicked: mainController.wallpaper.pickWallpaper()
+                            onClicked: wallpaperController.pickWallpaper()
                         }
 
-                        Kirigami.Button {
+                        Button {
                             Layout.fillWidth: true
-                            text: i18n("Next")
-                            icon.source: "go-next"
-                            onClicked: mainController.wallpaper.nextWallpaper()
+                            text: qsTr("Next")
+                            icon.name: "go-next-view"
+                            onClicked: wallpaperController.nextWallpaper()
                         }
                     }
 
@@ -213,18 +211,18 @@ Kirigami.ApplicationWindow {
 
                         Kirigami.Heading {
                             level: 4
-                            text: i18n("Alternative ways to change wallpaper:")
+                            text: qsTr("Alternative ways to change wallpaper:")
                         }
 
                         Label {
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
-                            text: i18n(
+                            text: qsTr(
                                 "• Right-click desktop → Configure Desktop & Wallpaper\n" +
                                 "• System Settings → Appearance → Wallpaper\n" +
                                 "• Terminal: <tt>wallpaper-picker</tt>, <tt>wallpaper-next</tt>, <tt>wallpaper-prev</tt>"
                             )
-                            font.pointSize: Kirigami.Units.fontSizes.small
+                            font.pointSize: Platform.Units.smallSpacing
                             color: Kirigami.Theme.textColor
                             opacity: 0.7
                         }
@@ -234,31 +232,21 @@ Kirigami.ApplicationWindow {
         }
 
         // ─── Actions ───
-        actions.main: Kirigami.Action {
-            text: i18n("Settings")
-            icon.name: "configure"
-            onTriggered: pageStack.push(Qt.resolvedUrl("SettingsPage.qml"))
-        }
-
-        actions.main: Kirigami.Action {
-            text: i18n("Quit")
-            icon.name: "application-exit"
-            onTriggered: Qt.quit()
-        }
+        // actions handled via header buttons
     }
 
     // ─── Dialogs ───
     Kirigami.Dialog {
         id: confirmDialog
-        title: i18n("Confirm")
+        title: qsTr("Confirm")
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
-        onAccepted: mainController.profile.deleteProfile(confirmDialog.property("targetProfile"))
+        onAccepted: profileController.deleteProfile(confirmDialog.property("targetProfile"))
         property string targetProfile: ""
     }
 
     Kirigami.Dialog {
         id: saveDialog
-        title: i18n("Save Profile")
+        title: qsTr("Save Profile")
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
         property string newProfileName: ""
 
@@ -268,13 +256,13 @@ Kirigami.ApplicationWindow {
             TextField {
                 id: nameField
                 Layout.fillWidth: true
-                placeholderText: i18n("Profile name")
+                placeholderText: qsTr("Profile name")
                 onTextChanged: saveDialog.newProfileName = text
             }
         }
         onAccepted: {
             if (nameField.text.trim()) {
-                mainController.profile.saveProfile(nameField.text.trim())
+                profileController.saveProfile(nameField.text.trim())
                 nameField.text = ""
             }
         }
@@ -282,7 +270,7 @@ Kirigami.ApplicationWindow {
 
     Kirigami.Dialog {
         id: diffDialog
-        title: i18n("Profile Diff")
+        title: qsTr("Profile Diff")
         standardButtons: Kirigami.Dialog.Close
         property string profileA: ""
         property string profileB: ""
@@ -296,7 +284,7 @@ Kirigami.ApplicationWindow {
                 Layout.fillHeight: true
                 readOnly: true
                 font.family: "Monospace"
-                font.pointSize: Kirigami.Units.fontSizes.small
+                font.pointSize: Platform.Units.smallSpacing
                 wrapMode: TextEdit.NoWrap
             }
         }
@@ -305,7 +293,7 @@ Kirigami.ApplicationWindow {
 
         function updateDiff() {
             if (profileA && profileB) {
-                diffText.text = mainController.profile.diffProfiles(profileA, profileB)
+                diffText.text = profileController.diffProfiles(profileA, profileB)
             }
         }
     }
@@ -316,6 +304,9 @@ Kirigami.ApplicationWindow {
 
     // ─── Theme handling (dogfooding) ───
     Component.onCompleted: {
-        mainController.initialize()
+        profileController.refresh()
+wallpaperController.refresh()
+trackedAppsController.refresh()
+settingsController.load()
     }
 }

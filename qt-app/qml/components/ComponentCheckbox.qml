@@ -1,4 +1,5 @@
 import QtQuick
+import org.kde.kirigami.platform as Platform
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami 2.20 as Kirigami
@@ -27,22 +28,22 @@ Kirigami.AbstractCard {
 
     contentItem: RowLayout {
         Layout.fillWidth: true
-        spacing: Kirigami.Units.mediumSpacing
+        spacing: Platform.Units.mediumSpacing
 
         // Checkbox
         Kirigami.CheckBox {
             id: check
             checked: isSelected
             enabled: isAvailable
-            onToggled: toggled(checked)
+            onToggled: checkbox.toggled(checked, componentId)
             Layout.alignment: Qt.AlignVCenter
         }
 
         // Icon
         Kirigami.Icon {
             source: componentIcon
-            Layout.preferredWidth: Kirigami.Units.iconSizes.medium
-            Layout.preferredHeight: Kirigami.Units.iconSizes.medium
+            Layout.preferredWidth: Platform.Units.iconSizes.medium
+            Layout.preferredHeight: Platform.Units.iconSizes.medium
             color: isAvailable ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
             opacity: isAvailable ? 1.0 : 0.5
         }
@@ -62,7 +63,7 @@ Kirigami.AbstractCard {
                 // Status badge
                 Label {
                     text: componentStatusText
-                    font.pointSize: Kirigami.Units.fontSizes.small
+                    font.pointSize: Platform.Units.smallSpacing
                     color: statusColor
                     visible: !isAvailable || componentStatus === "partial"
                 }
@@ -70,7 +71,7 @@ Kirigami.AbstractCard {
                 // Live reload badge
                 Label {
                     text: i18n("Live")
-                    font.pointSize: Kirigami.Units.fontSizes.small
+                    font.pointSize: Platform.Units.smallSpacing
                     color: Kirigami.Theme.highlightColor
                     visible: componentSupportsLiveReload && isAvailable
                 }
@@ -78,19 +79,13 @@ Kirigami.AbstractCard {
 
             Label {
                 text: componentDescription
-                font.pointSize: Kirigami.Units.fontSizes.small
+                font.pointSize: Platform.Units.smallSpacing
                 color: Kirigami.Theme.textColor
                 opacity: 0.6
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
                 visible: componentDescription !== ""
             }
-        }
-
-        // Not installed warning
-        Item {
-            Layout.fillWidth: true
-            visible: !isAvailable && mainController.settings.showNotInstalledWarning
         }
     }
 
@@ -101,9 +96,7 @@ Kirigami.AbstractCard {
         color: Kirigami.Theme.viewColor
         opacity: isAvailable ? 0 : 0.15
         visible: !isAvailable
-        layer.enabled: true
-        layer.effect: OpacityAnimator { target: disabledOverlay }
     }
 
-    signal toggled(bool checked)
+    signal toggled(bool checked, string componentId)
 }

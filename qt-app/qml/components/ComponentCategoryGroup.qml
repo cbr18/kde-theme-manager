@@ -1,4 +1,5 @@
 import QtQuick
+import org.kde.kirigami.platform as Platform
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami 2.20 as Kirigami
@@ -10,9 +11,20 @@ Kirigami.Card {
     property var selectedComponents: []
     property var availableComponents: []
 
+    // Local selection state (mirrors selectedComponents but mutable)
+    property var _localSelection: []
+
+    Component.onCompleted: {
+        _localSelection = selectedComponents.slice()
+    }
+
+    onSelectedComponentsChanged: {
+        _localSelection = selectedComponents.slice()
+    }
+
     ColumnLayout {
         Layout.fillWidth: true
-        spacing: Kirigami.Units.smallSpacing
+        spacing: Platform.Units.smallSpacing
 
         // Category header
         RowLayout {
@@ -20,8 +32,8 @@ Kirigami.Card {
 
             Kirigami.Icon {
                 source: categoryIcon(category)
-                Layout.preferredWidth: Kirigami.Units.iconSizes.medium
-                Layout.preferredHeight: Kirigami.Units.iconSizes.medium
+                Layout.preferredWidth: Platform.Units.iconSizes.medium
+                Layout.preferredHeight: Platform.Units.iconSizes.medium
                 color: Kirigami.Theme.highlightColor
             }
 
@@ -32,7 +44,6 @@ Kirigami.Card {
 
             Item { Layout.fillWidth: true }
 
-            // Expand/collapse
             Kirigami.ToolButton {
                 id: expandBtn
                 icon.source: expanded ? "go-up" : "go-down"
@@ -46,11 +57,12 @@ Kirigami.Card {
         ColumnLayout {
             id: componentsLayout
             Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
+            spacing: Platform.Units.smallSpacing
             visible: expanded
             height: expanded ? implicitHeight : 0
 
             Repeater {
+                id: repeater
                 model: mainController.tracked_apps.getComponentsByCategory(category)
                 delegate: ComponentCheckbox {
                     componentId: model.id
@@ -60,22 +72,28 @@ Kirigami.Card {
                     componentDescription: model.description
                     componentIcon: model.icon
                     componentSupportsLiveReload: model.supportsLiveReload
-                    isSelected: selectedComponents.indexOf(model.id) !== -1
+                    isSelected: _localSelection.indexOf(model.id) !== -1
                     isAvailable: availableComponents.indexOf(model.id) !== -1
                     onToggled: {
+                        var idx = _localSelection.indexOf(componentId)
+                        if (checked && idx === -1) {
+                            _localSelection.push(componentId)
+                        } else if (!checked && idx !== -1) {
+                            _localSelection.splice(idx, 1)
+                        }
+                        // Update the bound property
+                        group.selectedComponents = _localSelection.slice()
                         selectionChanged()
                     }
                 }
             }
         }
 
-        // Animated expand/collapse
         Behavior on componentsLayout.height {
             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
         }
     }
 
-    // Internal state
     property bool expanded: true
 
     function categoryIcon(cat: string): string {

@@ -1,4 +1,5 @@
 import QtQuick
+import org.kde.kirigami.platform as Platform
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami 2.20 as Kirigami
@@ -8,15 +9,20 @@ Kirigami.AbstractCard {
     Layout.preferredWidth: 160
     Layout.minimumWidth: 140
     Layout.maximumWidth: 200
+    property string profileName: ""
+    property bool isActive: false
+    property int componentCount: 0
+
+    signal profileClicked(string profileName)
+
     contentItem: ColumnLayout {
         Layout.fillWidth: true
-        spacing: Kirigami.Units.smallSpacing
+        spacing: Platform.Units.smallSpacing
 
-        // Radio button + icon
         RowLayout {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
-            spacing: Kirigami.Units.smallSpacing
+            spacing: Platform.Units.smallSpacing
 
             Kirigami.Icon {
                 source: "preferences-desktop-theme"
@@ -26,56 +32,75 @@ Kirigami.AbstractCard {
                 opacity: isActive ? 1.0 : 0.5
             }
 
-            Kirigami.RadioButton {
+            RadioButton {
                 id: radio
                 checked: isActive
-                text: profileName === "glass" ? i18n("Glass") :
-                      profileName === "paper" ? i18n("Paper") : profileName
+                text: profileName === "glass" ? qsTr("Glass") :
+                      profileName === "paper" ? qsTr("Paper") : profileName
+                enabled: enabled
                 onClicked: {
-                    if (!isActive) {
-                        clicked()
+                    if (!isActive && enabled) {
+                        profileClicked(profileName)
                     }
                 }
             }
         }
 
-        // Component count badge
         Label {
             Layout.alignment: Qt.AlignHCenter
-            text: i18n("%1 components", componentCount)
-            font.pointSize: Kirigami.Units.fontSizes.small
+            text: qsTr("%1 components").arg(componentCount)
+            font.pointSize: Platform.Units.smallSpacing
             color: Kirigami.Theme.textColor
             opacity: 0.6
         }
     }
 
-    // Properties
-    property string profileName: ""
-    property bool isActive: false
-    property int componentCount: 0
-
-    // Signal
-    signal clicked()
-
-    // Visual feedback
     background: Rectangle {
+        id: bgRect
         implicitWidth: 160
         implicitHeight: 80
-        radius: Kirigami.Units.largeRadius
-        border.color: isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.viewColor
+        radius: Platform.Units.largeRadius
         border.width: isActive ? 2 : 1
-        color: isActive ? Kirigami.Theme.highlightColor : "transparent"
-        opacity: isActive ? 0.1 : 1.0
+        color: "transparent"
+        opacity: 1.0
 
         Behavior on border.color { ColorAnimation { duration: 200 } }
         Behavior on color { ColorAnimation { duration: 200 } }
         Behavior on opacity { NumberAnimation { duration: 200 } }
     }
 
+    // Update background properties when theme/state changes
+    Binding {
+        target: bgRect
+        property: "radius"
+        value: Platform.Units.largeRadius
+    }
+    Binding {
+        target: bgRect
+        property: "border.color"
+        value: isActive ? Kirigami.Theme.highlightColor : (enabled ? Kirigami.Theme.viewColor : Kirigami.Theme.disabledTextColor)
+    }
+    Binding {
+        target: bgRect
+        property: "color"
+        value: isActive ? Kirigami.Theme.highlightColor : "transparent"
+    }
+    Binding {
+        target: bgRect
+        property: "opacity"
+        value: isActive ? 0.1 : (enabled ? 1.0 : 0.5)
+    }
+    Binding {
+        target: bgRect
+        property: "border.width"
+        value: isActive ? 2 : 1
+    }
+
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
-        onEntered: parent.border.color = isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.hoverColor
-        onExited: parent.border.color = isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.viewColor
+        enabled: enabled
+        onEntered: if (enabled) bgRect.border.color = isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.hoverColor
+        onExited: if (enabled) bgRect.border.color = isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.viewColor
     }
 }
