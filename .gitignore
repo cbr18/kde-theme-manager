@@ -39,6 +39,22 @@ Thumbs.db
 ~/.config/theme-profile/backups/
 ~/.config/theme-profile/profiles/*/metadata/
 
+# qt-app specific
+qt-app/.venv/
+qt-app/venv/
+qt-app/env/
+qt-app/.env
+qt-app/dist/
+qt-app/build/
+qt-app/*.egg-info/
+qt-app/.pytest_cache/
+qt-app/.mypy_cache/
+qt-app/.ruff_cache/
+qt-app/htmlcov/
+qt-app/.coverage
+qt-app/target/
+qt-app/Cargo.lock
+
 # Logs
 *.log
 
