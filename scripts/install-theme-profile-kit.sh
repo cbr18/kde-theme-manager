@@ -13,7 +13,6 @@ SCRIPTS=(
   "wallpaper-picker"
   "wallpaper-next"
   "wallpaper-prev"
-  "rgb-hyperion-sync"
 )
 
 mkdir -p "$DEST_DIR" "$BACKUP_DIR/bin"

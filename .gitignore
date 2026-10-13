@@ -1,0 +1,57 @@
+# Build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Qt/PySide
+*.qmlc
+*.jsc
+qmlcache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime/cache
+~/.cache/wallpaper-picker/
+~/.cache/wallpaper_index
+~/.config/theme-profile/backups/
+~/.config/theme-profile/profiles/*/metadata/
+
+# Logs
+*.log
+
+# Local config overrides
+config.local.yaml
+local.toml
+
+# Rust (for future core)
+target/
+Cargo.lock
+
+# Node (if any frontend tooling)
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

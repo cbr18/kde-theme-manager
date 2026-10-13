@@ -1,41 +1,61 @@
 # theme-profile-kit
 
-Source-of-truth kit for local KDE theme/profile helper scripts.
+Сохранение и применение профилей оформления KDE Plasma.
 
-Deployed scripts live in:
+Позволяет переключаться между темами оформления **glass** (полупрозрачное стекло) и **paper** (светлая/solid тема) одной командой, сохраняя и восстанавливая десятки настроек: KWin эффекты, темы GTK/Qt, настройки терминалов, редакторов и браузера Zen.
 
-```text
-~/.local/bin/
-```
+## Состав
 
-Source scripts live in:
+| Скрипт | Назначение |
+|--------|------------|
+| `theme-profile` | CLI: save/apply/list/diff профилей |
+| `theme-menu` | wofi-меню для управления профилями |
+| `wallpaper-picker` | выбор обоев через wofi с превью |
+| `wallpaper-next` / `wallpaper-prev` | листание обоев |
 
-```text
-~/theme-profile-kit/files/bin/
-```
+## Зависимости
 
-## Scripts
+Всё стандартное для KDE Plasma 6:
 
-- `theme-profile` - applies/saves KDE theme profiles from `~/.config/theme-profile/profiles`.
-- `theme-menu` - Wofi menu for theme profiles.
-- `wallpaper-picker` - Wofi wallpaper picker.
-- `wallpaper-next` - next wallpaper helper.
-- `wallpaper-prev` - previous wallpaper helper.
-- `rgb-hyperion-sync` - Hyperion helper currently kept here because it has no matching source in `~/rgb-control-kit/files/bin`.
+| Пакет | Зачем |
+|---|---|
+| `wofi` | меню (`theme-menu`, `wallpaper-picker`) |
+| `plasma-workspace` | `kreadconfig6`/`kwriteconfig6`/`kbuildsycoca6` |
+| `plasma-workspace` | `plasma-apply-wallpaperimage` |
+| `imagemagick` | генерация превью обоев (`wallpaper-picker`) |
 
-## Deploy
+Всё это ставится вместе с KDE Plasma из коробки. Дополнительно ничего качать не нужно.
+
+Опционально:
+- `kitty` — для live-перезагрузки темы терминала (если используете kitty)
+- `dolphin` — для кнопки "Open profile folder" в `theme-menu`
+
+## Установка
 
 ```bash
 ~/theme-profile-kit/scripts/install-theme-profile-kit.sh
 ```
 
-The installer creates a timestamped backup in:
+Создаёт бэкап предыдущих версий в `~/.config/theme-profile/backups/`.
 
-```text
-~/.config/theme-profile/backups/deploy-theme-profile-kit-YYYYMMDD-HHMMSS
+## Использование
+
+```bash
+theme-profile list               # список профилей
+theme-profile apply glass        # применить профиль
+theme-profile save my-profile    # сохранить текущее состояние
+theme-menu                       # wofi-меню
+wallpaper-picker                 # выбор обоев
 ```
 
-## Editing Rule
+## Профили
 
-Edit files in `~/theme-profile-kit/files/bin/` first, then deploy with the installer.
-Do not edit `~/.local/bin/theme-profile` or related deployed scripts directly unless it is an emergency hotfix that is copied back into this kit immediately.
+- `glass` — полупрозрачные окна с размытием, KWin glass enabled
+- `paper` — светлая/solid тема, без прозрачностей
+
+Профили хранятся в `~/.config/theme-profile/profiles/`.
+
+## Правило редактирования
+
+Править файлы в `~/theme-profile-kit/files/bin/`, затем запустить `install-theme-profile-kit.sh`.
+Не редактировать `~/.local/bin/` напрямую (или сразу скопировать изменения обратно в kit).
