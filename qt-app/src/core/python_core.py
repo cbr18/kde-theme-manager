@@ -104,14 +104,13 @@ class PythonProfileCore(ProfileCore):
     def apply(self, profile: str, components: Optional[list[str]] = None) -> Result:
         args = ["apply", profile]
         if components:
-            # TODO: добавить поддержку --components в bash скрипт
-            args.extend(["--components", ",".join(components)])
+            args.append(f"--components={','.join(components)}")
         return self._run(args, timeout=60)
 
     def save(self, name: str, components: Optional[list[str]] = None) -> Result:
         args = ["save", name]
         if components:
-            args.extend(["--components", ",".join(components)])
+            args.append(f"--components={','.join(components)}")
         return self._run(args, timeout=60)
 
     def delete(self, name: str) -> Result:
