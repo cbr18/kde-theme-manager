@@ -16,6 +16,26 @@ Kirigami.ApplicationWindow {
     minimumWidth: 600
     minimumHeight: 480
 
+    // Подключение ThemeController к окну
+    Component.onCompleted: {
+        themeController.set_window(root)
+        profileController.refresh()
+        wallpaperController.refresh()
+        trackedAppsController.refresh()
+        settingsController.load()
+    }
+
+    // Поддержка glass темы: прозрачный фон
+    color: themeController.isGlass ? "transparent" : Kirigami.Theme.backgroundColor
+
+    // Реакция на смену темы
+    Connections {
+        target: themeController
+        onIsGlassChanged: {
+            root.color = themeController.isGlass ? "transparent" : Kirigami.Theme.backgroundColor
+        }
+    }
+
     // Глобальные настройки
     property bool isDarkTheme: Kirigami.Theme.highlightColor.r < 0.5
 
@@ -103,6 +123,11 @@ Kirigami.ApplicationWindow {
                         model: profileController.profiles
                         delegate: ProfileCardDelegate {
                             onApplyClicked: profileController.applyProfile(model.name)
+                            onPreviewClicked: {
+                                previewDialog.previewProfile = model.name
+                                previewDialog.activeProfile = profileController.activeProfile
+                                previewDialog.open()
+                            }
                             onDeleteClicked: {
                                 if (settingsController.confirmBeforeApply) {
                                     confirmDialog.text = qsTr("Delete profile \"%1\"?", model.name)
@@ -298,15 +323,145 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    // ─── Preview Dialog ───
+    Kirigami.Dialog {
+        id: previewDialog
+        title: qsTr("Preview Profile Changes")
+        standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
+        property string previewProfile: ""
+        property string activeProfile: ""
+
+        Kirigami.ScrollablePage {
+            Layout.minimumWidth: 550
+            Layout.minimumHeight: 450
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Platform.Units.mediumSpacing
+
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("Applying <b>%1</b> will change:").arg(previewDialog.previewProfile)
+                    font.pointSize: Platform.Units.mediumSpacing
+                }
+
+                // Components that will be applied
+                Kirigami.Card {
+                    Layout.fillWidth: true
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Platform.Units.smallSpacing
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: qsTr("Components to apply (%1):").arg(previewDialog.componentsToApply.length)
+                            font.bold: true
+                            font.pointSize: Platform.Units.smallSpacing
+                        }
+
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 4
+                            Repeater {
+                                model: previewDialog.componentsToApply
+                                delegate: Kirigami.Chip {
+                                    text: modelData.name
+                                    icon.name: modelData.icon
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Diff preview (collapsible)
+                Kirigami.Card {
+                    Layout.fillWidth: true
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Platform.Units.smallSpacing
+
+                        RowLayout {
+                            Label {
+                                text: qsTr("Full diff (unified):")
+                                font.bold: true
+                            }
+                            Item { Layout.fillWidth: true }
+                            Button {
+                                flat: true
+                                text: previewDialog.diffExpanded ? qsTr("Collapse") : qsTr("Expand")
+                                onClicked: previewDialog.diffExpanded = !previewDialog.diffExpanded
+                            }
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            visible: previewDialog.diffExpanded
+                            TextEdit {
+                                anchors.fill: parent
+                                readOnly: true
+                                font.family: "Monospace"
+                                font.pointSize: Platform.Units.smallSpacing
+                                wrapMode: TextEdit.NoWrap
+                                text: previewDialog.diffText
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        property bool diffExpanded: false
+        property var componentsToApply: []
+        property string diffText: ""
+
+        onPreviewProfileChanged: {
+            if (previewProfile && activeProfile) {
+                // Get components for the preview profile
+                var comps = profileController.getProfileComponents(previewProfile)
+                var compList = []
+                for (var i = 0; i < comps.length; i++) {
+                    compList.push({id: comps[i], name: comps[i], icon: getComponentIcon(comps[i])})
+                }
+                previewDialog.componentsToApply = compList
+                previewDialog.diffText = profileController.diffProfiles(activeProfile, previewProfile)
+            }
+        }
+
+        onAccepted: {
+            profileController.applyProfile(previewProfile)
+        }
+    }
+
     function showSaveDialog() {
         saveDialog.open()
     }
 
-    // ─── Theme handling (dogfooding) ───
-    Component.onCompleted: {
-        profileController.refresh()
-wallpaperController.refresh()
-trackedAppsController.refresh()
-settingsController.load()
+    function getComponentIcon(compId) {
+        const icons = {
+            "kwin": "preferences-system-windows",
+            "plasma_shell": "plasma",
+            "kdeglobals": "preferences-desktop-theme",
+            "gtk3": "preferences-desktop-theme-gtk",
+            "gtk4": "preferences-desktop-theme-gtk",
+            "qt5ct": "qtlogo",
+            "klassy": "preferences-system-windows",
+            "kvantum": "preferences-system-windows",
+            "kitty": "utilities-terminal",
+            "alacritty": "utilities-terminal",
+            "wofi": "system-run",
+            "btop": "utilities-system-monitor",
+            "fastfetch": "preferences-desktop-theme",
+            "zed": "text-editor",
+            "vscode": "visual-studio-code",
+            "cursor": "text-editor",
+            "zen": "web-browser",
+            "obsidian": "x-office-note",
+            "color_schemes": "preferences-desktop-color",
+            "look_and_feel": "preferences-desktop-theme",
+        }
+        return icons[compId] || "application-x-executable"
     }
+
 }

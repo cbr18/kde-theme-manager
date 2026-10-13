@@ -98,6 +98,14 @@ Kirigami.AbstractCard {
             }
 
             Button {
+                icon.name: "document-preview"
+                flat: true
+                visible: !model.isActive
+                tooltip: qsTr("Preview changes before applying")
+                onClicked: previewClicked(model.name)
+            }
+
+            Button {
                 icon.name: "document-properties"
                 flat: true
                 visible: !model.isActive
@@ -115,6 +123,7 @@ Kirigami.AbstractCard {
 
     // Signals
     signal applyClicked(string profileName)
+    signal previewClicked(string profileName)
     signal diffClicked(string profileName)
     signal deleteClicked(string profileName)
 

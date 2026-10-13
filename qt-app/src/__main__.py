@@ -19,6 +19,7 @@ from PySide6.QtQuickControls2 import QQuickStyle
 # Импорт контроллеров
 from controllers import MainController, register_controllers
 from theme_controller import register_theme_controller
+from system_tray import register_system_tray
 
 # Регистрация мета-типов для QML (not needed in PySide6, Python types auto-registered)
 from core.protocol import Result, ProfileInfo, Component, AppStatus, AppSettings
@@ -80,6 +81,10 @@ def main() -> int:
         except AttributeError:
             pass
         return 1
+
+    # Получить главное окно и зарегистрировать System Tray
+    main_window = engine.rootObjects()[0]
+    register_system_tray(engine, main_window)
 
     return app.exec()
 

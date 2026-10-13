@@ -1,18 +1,14 @@
 """
 Theme Controller — Dogfooding: применяет активный профиль к самому приложению.
 
-Читает активный профиль (glass/paper) и настраивает:
-- Kirigami.Theme / QtQuick.Controls.Material
-- Прозрачность окна + KWin blur для glass
-- Цветовую схему
+Поддерживает: glass (прозрачность + KWin blur), paper, dark, light, system.
 """
 
-from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer, QUrl
-from PySide6.QtGui import QGuiApplication
+import os
+import subprocess
+from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer, Qt
+from PySide6.QtGui import QGuiApplication, QWindow
 from PySide6.QtQml import qmlRegisterSingletonInstance
-
-from controllers import MainController
-from core import CoreFactory
 
 
 class ThemeController(QObject):
@@ -20,6 +16,7 @@ class ThemeController(QObject):
 
     themeChanged = Signal(str)
     glassEffectChanged = Signal(bool)
+    windowBlurChanged = Signal(bool)
 
     _instance = None
 
@@ -37,6 +34,7 @@ class ThemeController(QObject):
         self._current_theme = "system"  # system, glass, paper, dark, light
         self._is_glass = False
         self._blur_enabled = False
+        self._window = None
         self._update_timer = QTimer(self)
         self._update_timer.setSingleShot(True)
         self._update_timer.timeout.connect(self._apply_theme)
@@ -46,6 +44,11 @@ class ThemeController(QObject):
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
+
+    @Slot(QWindow)
+    def set_window(self, window: QWindow) -> None:
+        """Установить главное окно для применения эффектов."""
+        self._window = window
 
     @Property(str, notify=themeChanged)
     def currentTheme(self) -> str:
@@ -62,21 +65,16 @@ class ThemeController(QObject):
     def isGlass(self) -> bool:
         return self._is_glass
 
-    @Property(bool, notify=glassEffectChanged)
+    @Property(bool, notify=windowBlurChanged)
     def blurEnabled(self) -> bool:
         return self._blur_enabled
 
     def _schedule_apply(self) -> None:
-        self._update_timer.start(100)
+        self._update_timer.start(50)
 
     @Slot()
     def _apply_theme(self) -> None:
         """Применить тему к приложению."""
-        app = QGuiApplication.instance()
-        if not app:
-            return
-
-        # Определяем эффективную тему
         effective_theme = self._resolve_theme()
 
         if effective_theme == "glass":
@@ -95,37 +93,66 @@ class ThemeController(QObject):
         if self._current_theme != "system":
             return self._current_theme
 
-        # Проверить системную тему
         palette = QGuiApplication.palette()
         bg = palette.color(palette.ColorRole.Window)
-        # Простая эвристика: если фон темный — dark
         luminance = (0.299 * bg.red() + 0.587 * bg.green() + 0.114 * bg.blue()) / 255
         return "dark" if luminance < 0.5 else "light"
 
     def _apply_glass_theme(self) -> None:
-        """Glass theme: прозрачность + blur."""
+        """Glass theme: прозрачность окна + KWin blur."""
         self._is_glass = True
         self._blur_enabled = True
         self.glassEffectChanged.emit(True)
+        self.windowBlurChanged.emit(True)
 
-        # Настройка палитры для прозрачности
-        app = QGuiApplication.instance()
-        # TODO: настроить прозрачность окна через QML (ApplicationWindow.background)
+        if self._window:
+            self._enable_window_blur()
+
+    def _enable_window_blur(self) -> None:
+        """Включить прозрачность окна (без изменения флагов)."""
+        if not self._window:
+            return
+
+        # Включить прозрачность фона (без изменения window flags)
+        self._window.setAttribute(Qt.WA_TranslucentBackground, True)
+        self._window.setAttribute(Qt.WA_NoSystemBackground, True)
+
+        # Для Wayland: запрашиваем blur через KWin (non-blocking)
+        QTimer.singleShot(100, self._request_kwin_blur)
+
+    def _request_kwin_blur(self) -> None:
+        """Запросить KWin blur через D-Bus (works on Wayland)."""
+        try:
+            # Попытка через qdbus6
+            subprocess.run([
+                "qdbus6", "org.kde.KWin", "/KWin",
+                "org.kde.KWin.loadEffect", "blur"
+            ], capture_output=True, timeout=1)
+        except Exception:
+            pass
 
     def _apply_paper_theme(self) -> None:
         """Paper theme: светлая, без прозрачности."""
         self._is_glass = False
         self._blur_enabled = False
         self.glassEffectChanged.emit(False)
+        self.windowBlurChanged.emit(False)
+        self._disable_window_blur()
         self._apply_light_theme()
+
+    def _disable_window_blur(self) -> None:
+        """Отключить прозрачность и blur."""
+        if self._window:
+            self._window.setAttribute(Qt.WA_TranslucentBackground, False)
+            self._window.setAttribute(Qt.WA_NoSystemBackground, False)
 
     def _apply_dark_theme(self) -> None:
         """Тёмная тема."""
         self._is_glass = False
         self._blur_enabled = False
         self.glassEffectChanged.emit(False)
-        # QtQuick.Controls.Material theme
-        import os
+        self.windowBlurChanged.emit(False)
+        self._disable_window_blur()
         os.environ["QT_QUICK_CONTROLS_MATERIAL_THEME"] = "Dark"
         os.environ["QT_QUICK_CONTROLS_STYLE"] = "Material"
 
@@ -134,13 +161,18 @@ class ThemeController(QObject):
         self._is_glass = False
         self._blur_enabled = False
         self.glassEffectChanged.emit(False)
-        import os
+        self.windowBlurChanged.emit(False)
+        self._disable_window_blur()
         os.environ["QT_QUICK_CONTROLS_MATERIAL_THEME"] = "Light"
         os.environ["QT_QUICK_CONTROLS_STYLE"] = "Material"
 
     def _apply_system_theme(self) -> None:
         """Системная тема (follow system)."""
-        import os
+        self._is_glass = False
+        self._blur_enabled = False
+        self.glassEffectChanged.emit(False)
+        self.windowBlurChanged.emit(False)
+        self._disable_window_blur()
         os.environ.pop("QT_QUICK_CONTROLS_MATERIAL_THEME", None)
         os.environ.pop("QT_QUICK_CONTROLS_STYLE", None)
 
@@ -150,7 +182,6 @@ class ThemeController(QObject):
         if profile_name in ("glass", "paper"):
             self.currentTheme = profile_name
         else:
-            # Для кастомных профилей проверяем kdeglobals
             self._detect_from_kdeglobals()
 
     def _detect_from_kdeglobals(self) -> None:
@@ -163,7 +194,6 @@ class ThemeController(QObject):
             if kdeglobals.exists():
                 config = configparser.ConfigParser()
                 config.read(kdeglobals)
-                # Проверить цветовую схему
                 color_scheme = config.get("General", "ColorScheme", fallback="")
                 if "dark" in color_scheme.lower():
                     self.currentTheme = "dark"
