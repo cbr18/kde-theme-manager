@@ -81,7 +81,8 @@ fi
 echo "=== Section 4: Profile name validation ==="
 
 # Use a temporary HOME so save/apply don't touch the real profile dir
-export TMP_ROOT="$(mktemp -d)"
+TMP_ROOT="$(mktemp -d)"
+export TMP_ROOT
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 # Bootstrap a fake ~/.config/theme-profile structure
@@ -90,8 +91,7 @@ mkdir -p "$FAKE_HOME/.config/theme-profile"
 
 # Create a real profile so we can test apply success and save
 mkdir -p "$FAKE_HOME/.config/theme-profile/profiles/test-profile"
-HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" save test-profile >/dev/null 2>&1
-if [ $? -eq 0 ]; then
+if HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" save test-profile >/dev/null 2>&1; then
   ok "save test-profile (valid name)"
 else
   fail "save test-profile (valid name) — should succeed"
@@ -156,19 +156,19 @@ COUNT=${#FILES[@]}
 
 # next: 0 → 1
 INDEX=$(( (0 + 1) % COUNT ))
-[ "$INDEX" -eq 1 ] && ok "wallpaper-next: 0→1" || fail "wallpaper-next: expected 1 got $INDEX"
+if [ "$INDEX" -eq 1 ]; then ok "wallpaper-next: 0→1"; else fail "wallpaper-next: expected 1 got $INDEX"; fi
 
 # next: 2 → 0 (wrap)
 INDEX=$(( (2 + 1) % COUNT ))
-[ "$INDEX" -eq 0 ] && ok "wallpaper-next: 2→0 (wrap)" || fail "wallpaper-next: expected 0 got $INDEX"
+if [ "$INDEX" -eq 0 ]; then ok "wallpaper-next: 2→0 (wrap)"; else fail "wallpaper-next: expected 0 got $INDEX"; fi
 
 # prev: 0 → 2 (wrap)
 INDEX=$(( (0 - 1 + COUNT) % COUNT ))
-[ "$INDEX" -eq 2 ] && ok "wallpaper-prev: 0→2 (wrap)" || fail "wallpaper-prev: expected 2 got $INDEX"
+if [ "$INDEX" -eq 2 ]; then ok "wallpaper-prev: 0→2 (wrap)"; else fail "wallpaper-prev: expected 2 got $INDEX"; fi
 
 # prev: 1 → 0
 INDEX=$(( (1 - 1 + COUNT) % COUNT ))
-[ "$INDEX" -eq 0 ] && ok "wallpaper-prev: 1→0" || fail "wallpaper-prev: expected 0 got $INDEX"
+if [ "$INDEX" -eq 0 ]; then ok "wallpaper-prev: 1→0"; else fail "wallpaper-prev: expected 0 got $INDEX"; fi
 
 # --- 7. wallpaper-prev stderr leak test ---------------------------------------
 echo "=== Section 7: wallpaper-prev handles missing state file ==="

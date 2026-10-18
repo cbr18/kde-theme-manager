@@ -23,6 +23,11 @@ Kirigami.AbstractCard {
     property bool componentSupportsLiveReload: false
     property bool isSelected: false
     property bool isAvailable: false
+    property bool glassMode: false
+
+    readonly property color fgColor: glassMode ? "#ffffff" : safeColor("textColor", "#1f1f1f")
+    readonly property color dimColor: glassMode ? Qt.rgba(1, 1, 1, 0.6) : Qt.rgba(0.15, 0.15, 0.15, 0.6)
+    readonly property color disabledColor: glassMode ? Qt.rgba(1, 1, 1, 0.45) : safeColor("disabledTextColor", "#888888")
 
     // Visual state
     property color statusColor: {
@@ -31,28 +36,31 @@ Kirigami.AbstractCard {
             case "partial": return safeColor("warningTextColor", "#f39c12")
             case "not_installed": return safeColor("negativeTextColor", "#e74c3c")
         }
+        return dimColor
     }
 
+    signal toggled(bool checked, string componentId)
+
     contentItem: RowLayout {
-        Layout.fillWidth: true
         spacing: Platform.Units.mediumSpacing
 
         // Checkbox
         Kirigami.CheckBox {
-            id: check
-            checked: isSelected
-            enabled: isAvailable
-            onToggled: checkbox.toggled(checked, componentId)
+            checked: checkbox.isSelected
+            enabled: checkbox.isAvailable
+            onToggled: checkbox.toggled(checked, checkbox.componentId)
             Layout.alignment: Qt.AlignVCenter
+            palette.windowText: checkbox.fgColor
+            palette.text: checkbox.fgColor
         }
 
         // Icon
         Kirigami.Icon {
-            source: componentIcon
+            source: checkbox.componentIcon
             Layout.preferredWidth: Platform.Units.iconSizes.medium
             Layout.preferredHeight: Platform.Units.iconSizes.medium
-            color: isAvailable ? safeColor("textColor", "#1f1f1f") : safeColor("disabledTextColor", "#888888")
-            opacity: isAvailable ? 1.0 : 0.5
+            color: checkbox.isAvailable ? checkbox.fgColor : checkbox.disabledColor
+            opacity: checkbox.isAvailable ? 1.0 : 0.5
         }
 
         // Name + status
@@ -62,53 +70,39 @@ Kirigami.AbstractCard {
 
             RowLayout {
                 Label {
-                    text: componentName
+                    text: checkbox.componentName
                     font.bold: true
-                    color: isAvailable ? safeColor("textColor", "#1f1f1f") : safeColor("disabledTextColor", "#888888")
+                    color: checkbox.isAvailable ? checkbox.fgColor : checkbox.disabledColor
                 }
 
-                // Status badge
                 Label {
-                    text: componentStatusText
+                    text: checkbox.componentStatusText
                     font.pointSize: Platform.Units.smallSpacing
-                    color: statusColor
-                    visible: !isAvailable || componentStatus === "partial"
+                    color: checkbox.statusColor
+                    visible: !checkbox.isAvailable || checkbox.componentStatus === "partial"
                 }
 
-                // Live reload badge
                 Label {
-                    text: i18n("Live")
+                    text: qsTr("Live")
                     font.pointSize: Platform.Units.smallSpacing
-                    color: safeColor("highlightColor", "#2980b9")
-                    visible: componentSupportsLiveReload && isAvailable
+                    color: checkbox.safeColor("highlightColor", "#2980b9")
+                    visible: checkbox.componentSupportsLiveReload && checkbox.isAvailable
                 }
             }
 
             Label {
-                text: componentDescription
+                text: checkbox.componentDescription
                 font.pointSize: Platform.Units.smallSpacing
-                color: safeColor("textColor", "#1f1f1f")
-                opacity: 0.6
+                color: checkbox.dimColor
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
-                visible: componentDescription !== ""
+                visible: checkbox.componentDescription !== ""
             }
         }
     }
 
-    // Disabled overlay
     background: Rectangle {
-        color: glassMode ? "transparent" : safeColor("viewColor", "#e0e0e0")
         radius: 4
+        color: checkbox.glassMode ? Qt.rgba(1, 1, 1, 0.06) : checkbox.safeColor("viewColor", "#ffffff")
     }
-
-    Rectangle {
-        id: disabledOverlay
-        anchors.fill: parent
-        color: safeColor("viewColor", "#e0e0e0")
-        opacity: isAvailable ? 0 : 0.15
-        visible: !isAvailable
-    }
-
-    signal toggled(bool checked, string componentId)
 }

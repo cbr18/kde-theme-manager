@@ -4,7 +4,6 @@ Theme Controller — Dogfooding: применяет активный профи�
 Поддерживает: glass (прозрачность + KWin blur), paper, dark, light, system.
 """
 
-import os
 import subprocess
 from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer, Qt
 from PySide6.QtGui import QGuiApplication, QWindow, QColor, QPalette
@@ -101,10 +100,70 @@ class ThemeController(QObject):
         luminance = (0.299 * bg.red() + 0.587 * bg.green() + 0.114 * bg.blue()) / 255
         return "dark" if luminance < 0.5 else "light"
 
+    def _apply_palette(self, dark: bool) -> None:
+        """Switch the whole application palette (drives QQC2 + Kirigami.Theme).
+
+        Without this, glass mode ends up "half dark": our explicit QML colors
+        turn light while the QQC2 controls keep following the light palette.
+        """
+        app = QGuiApplication.instance()
+        if app is None:
+            return
+
+        if dark:
+            window = QColor(32, 33, 36)
+            base = QColor(24, 25, 28)
+            alternate = QColor(41, 43, 47)
+            button = QColor(45, 47, 52)
+            text = QColor(240, 240, 240)
+            highlight = QColor(61, 174, 233)
+            highlighted_text = QColor(0, 0, 0)
+            disabled = QColor(150, 150, 150)
+        else:
+            window = QColor(239, 240, 243)
+            base = QColor(255, 255, 255)
+            alternate = QColor(245, 245, 245)
+            button = QColor(239, 240, 243)
+            text = QColor(31, 31, 31)
+            highlight = QColor(41, 128, 185)
+            highlighted_text = QColor(255, 255, 255)
+            disabled = QColor(136, 136, 136)
+
+        placeholder = QColor(text)
+        placeholder.setAlpha(128)
+
+        palette = app.palette()
+        mapping = {
+            QPalette.ColorRole.Window: window,
+            QPalette.ColorRole.WindowText: text,
+            QPalette.ColorRole.Base: base,
+            QPalette.ColorRole.AlternateBase: alternate,
+            QPalette.ColorRole.ToolTipBase: base,
+            QPalette.ColorRole.ToolTipText: text,
+            QPalette.ColorRole.Text: text,
+            QPalette.ColorRole.PlaceholderText: placeholder,
+            QPalette.ColorRole.Button: button,
+            QPalette.ColorRole.ButtonText: text,
+            QPalette.ColorRole.BrightText: QColor(255, 0, 0),
+            QPalette.ColorRole.Light: alternate,
+            QPalette.ColorRole.Midlight: alternate,
+            QPalette.ColorRole.Highlight: highlight,
+            QPalette.ColorRole.HighlightedText: highlighted_text,
+            QPalette.ColorRole.Link: highlight,
+        }
+        for role, color in mapping.items():
+            palette.setColor(QPalette.ColorGroup.All, role, color)
+            palette.setColor(QPalette.ColorGroup.Disabled, role, disabled)
+            if role == QPalette.ColorRole.Window:
+                palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, disabled)
+
+        app.setPalette(palette)
+
     def _apply_glass_theme(self) -> None:
-        """Glass theme: прозрачность окна + KWin blur."""
+        """Glass theme: прозрачность окна + KWin blur + тёмная палитра."""
         self._is_glass = True
         self._blur_enabled = True
+        self._apply_palette(dark=True)
         self.glassEffectChanged.emit(True)
         self.windowBlurChanged.emit(True)
 
@@ -112,17 +171,14 @@ class ThemeController(QObject):
             self._enable_window_blur()
 
     def _enable_window_blur(self) -> None:
-        """Включить прозрачность окна (без изменения флагов)."""
+        """Request KWin blur for the (translucent) window.
+
+        The window colour/transparency itself is owned by QML (the QML
+        `color` binding) — we must not call QWindow.setColor() here or it
+        would fight (and win over) the QML binding.
+        """
         if not self._window:
             return
-
-        # QWindow.setColor might not be available in PySide6;
-        # transparency is handled in QML (color: "transparent").
-        # KWin blur requested via D-Bus below.
-        try:
-            self._window.setColor(QColor(0, 0, 0, 0))
-        except AttributeError:
-            pass
 
         # Для Wayland: запрашиваем blur через KWin (non-blocking)
         QTimer.singleShot(100, self._request_kwin_blur)
@@ -148,12 +204,8 @@ class ThemeController(QObject):
         self._apply_light_theme()
 
     def _disable_window_blur(self) -> None:
-        """Disable transparency."""
-        if self._window:
-            try:
-                self._window.setColor(QColor(255, 255, 255, 255))
-            except AttributeError:
-                pass
+        """No-op: window transparency is fully driven by QML (see above)."""
+        return
 
     def _apply_dark_theme(self) -> None:
         """Тёмная тема."""
@@ -162,8 +214,7 @@ class ThemeController(QObject):
         self.glassEffectChanged.emit(False)
         self.windowBlurChanged.emit(False)
         self._disable_window_blur()
-        os.environ["QT_QUICK_CONTROLS_MATERIAL_THEME"] = "Dark"
-        os.environ["QT_QUICK_CONTROLS_STYLE"] = "Material"
+        self._apply_palette(dark=True)
 
     def _apply_light_theme(self) -> None:
         """Светлая тема."""
@@ -172,8 +223,7 @@ class ThemeController(QObject):
         self.glassEffectChanged.emit(False)
         self.windowBlurChanged.emit(False)
         self._disable_window_blur()
-        os.environ["QT_QUICK_CONTROLS_MATERIAL_THEME"] = "Light"
-        os.environ["QT_QUICK_CONTROLS_STYLE"] = "Material"
+        self._apply_palette(dark=False)
 
     def _apply_system_theme(self) -> None:
         """Системная тема (follow system)."""
@@ -182,8 +232,11 @@ class ThemeController(QObject):
         self.glassEffectChanged.emit(False)
         self.windowBlurChanged.emit(False)
         self._disable_window_blur()
-        os.environ.pop("QT_QUICK_CONTROLS_MATERIAL_THEME", None)
-        os.environ.pop("QT_QUICK_CONTROLS_STYLE", None)
+
+        from PySide6.QtGui import QGuiApplication as _QGui
+        hints = _QGui.styleHints()
+        dark = hints is not None and hints.colorScheme() == Qt.ColorMode.Dark
+        self._apply_palette(dark=dark)
 
     @Slot(str)
     def sync_with_active_profile(self, profile_name: str) -> None:

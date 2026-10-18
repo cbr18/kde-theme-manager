@@ -4,6 +4,7 @@ KDE Theme Profile Manager — Qt/QML Application Entry Point.
 v0.2.0 — Native KDE UI with Kirigami, Clean Architecture.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -13,8 +14,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtCore import QUrl, QCoreApplication, Qt
+from PySide6.QtCore import QUrl, QCoreApplication, QTimer, Qt
 from PySide6.QtGui import QPalette, QColor
+
+# Importing QtQuick ensures the QML root window is typed as QQuickWindow
+# (needed for grabWindow() and other QQuickWindow-only API).
+import PySide6.QtQuick  # noqa: F401
 
 # Импорт контроллеров
 from controllers import MainController, register_controllers
@@ -77,6 +82,31 @@ def _setup_palette(app: QApplication) -> None:
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
     palette.setColor(QPalette.ColorRole.Link, QColor(41, 128, 185))
     app.setPalette(palette)
+
+
+def _maybe_setup_screenshot(app: QApplication, main_window: object) -> None:
+    """Dev helper: render the window to a PNG then quit.
+
+    Enabled by setting KTM_SCREENSHOT=/path/to.png — useful for visual
+    smoke tests, since the compositor may not allow screen capture.
+    """
+    shot = os.environ.get("KTM_SCREENSHOT")
+    if not shot:
+        return
+
+    def _grab() -> None:
+        try:
+            img = main_window.grabWindow()  # type: ignore[attr-defined]
+            ok = img.save(shot)
+            print(
+                f"screenshot saved: {shot} ok={ok} size={img.width()}x{img.height()}",
+                file=sys.stderr,
+            )
+        except Exception as exc:  # pragma: no cover - dev helper
+            print(f"screenshot failed: {exc!r}", file=sys.stderr)
+        app.quit()
+
+    QTimer.singleShot(2500, _grab)
 
 
 def main() -> int:
@@ -157,6 +187,8 @@ def main() -> int:
     theme_controller._apply_theme()
 
     main_window.show()
+
+    _maybe_setup_screenshot(app, main_window)
 
     return app.exec()
 

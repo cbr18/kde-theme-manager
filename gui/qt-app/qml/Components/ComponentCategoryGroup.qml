@@ -12,100 +12,6 @@ Kirigami.Card {
         var c = Kirigami.Theme[role]
         return c && c.valid ? c : fallback
     }
-    Layout.fillWidth: true
-    property string category: ""
-    property var selectedComponents: []
-    property var availableComponents: []
-
-    background: Rectangle {
-        color: glassMode ? "transparent" : safeColor("viewColor", "#e0e0e0")
-        radius: 6
-    }
-
-    // Local selection state (mirrors selectedComponents but mutable)
-    property var _localSelection: []
-
-    Component.onCompleted: {
-        _localSelection = selectedComponents.slice()
-    }
-
-    onSelectedComponentsChanged: {
-        _localSelection = selectedComponents.slice()
-    }
-
-    ColumnLayout {
-        Layout.fillWidth: true
-        spacing: Platform.Units.smallSpacing
-
-        // Category header
-        RowLayout {
-            Layout.fillWidth: true
-
-            Kirigami.Icon {
-                source: categoryIcon(category)
-                Layout.preferredWidth: Platform.Units.iconSizes.medium
-                Layout.preferredHeight: Platform.Units.iconSizes.medium
-                color: safeColor("highlightColor", "#2980b9")
-            }
-
-            Kirigami.Heading {
-                level: 3
-                text: category
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Kirigami.ToolButton {
-                id: expandBtn
-                icon.source: expanded ? "go-up" : "go-down"
-                onClicked: expanded = !expanded
-            }
-        }
-
-        Kirigami.Separator {}
-
-        // Components list (collapsible)
-        ColumnLayout {
-            id: componentsLayout
-            Layout.fillWidth: true
-            spacing: Platform.Units.smallSpacing
-            visible: expanded
-            height: expanded ? implicitHeight : 0
-
-            Repeater {
-                id: repeater
-                model: mainController.tracked_apps.getComponentsByCategory(category)
-                delegate: ComponentCheckbox {
-                    componentId: model.id
-                    componentName: model.name
-                    componentStatus: model.status
-                    componentStatusText: model.statusText
-                    componentDescription: model.description
-                    componentIcon: model.icon
-                    componentSupportsLiveReload: model.supportsLiveReload
-                    isSelected: _localSelection.indexOf(model.id) !== -1
-                    isAvailable: availableComponents.indexOf(model.id) !== -1
-                    onToggled: {
-                        var idx = _localSelection.indexOf(componentId)
-                        if (checked && idx === -1) {
-                            _localSelection.push(componentId)
-                        } else if (!checked && idx !== -1) {
-                            _localSelection.splice(idx, 1)
-                        }
-                        // Update the bound property
-                        group.selectedComponents = _localSelection.slice()
-                        selectionChanged()
-                    }
-                }
-            }
-        }
-
-        Behavior on componentsLayout.height {
-            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-        }
-    }
-
-    property bool expanded: true
 
     function categoryIcon(cat) {
         const icons = {
@@ -119,10 +25,104 @@ Kirigami.Card {
             "Editors": "text-editor",
             "Browser": "web-browser",
             "Notes": "x-office-note",
-            "System Profiles": "preferences-desktop-theme",
+            "System Profiles": "preferences-desktop-theme"
         }
         return icons[cat] || "application-x-executable"
     }
 
+    Layout.fillWidth: true
+    property string category: ""
+    property var selectedComponents: []
+    property var availableComponents: []
+    property bool glassMode: false
+    property bool expanded: true
+
+    readonly property color fgColor: glassMode ? "#ffffff" : safeColor("textColor", "#1f1f1f")
+
+    // Local selection state (mirrors selectedComponents but mutable)
+    property var _localSelection: []
+
     signal selectionChanged()
+
+    onSelectedComponentsChanged: _localSelection = selectedComponents.slice()
+    Component.onCompleted: _localSelection = selectedComponents.slice()
+
+    contentItem: ColumnLayout {
+        spacing: Platform.Units.smallSpacing
+
+        // Category header
+        RowLayout {
+            Layout.fillWidth: true
+
+            Kirigami.Icon {
+                source: group.categoryIcon(group.category)
+                Layout.preferredWidth: Platform.Units.iconSizes.medium
+                Layout.preferredHeight: Platform.Units.iconSizes.medium
+                color: group.safeColor("highlightColor", "#2980b9")
+            }
+
+            Kirigami.Heading {
+                level: 3
+                text: group.category
+                color: group.fgColor
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Kirigami.ToolButton {
+                icon.source: group.expanded ? "go-up" : "go-down"
+                onClicked: group.expanded = !group.expanded
+            }
+        }
+
+        Kirigami.Separator {}
+
+        // Components list (collapsible)
+        ColumnLayout {
+            id: componentsLayout
+            Layout.fillWidth: true
+            spacing: Platform.Units.smallSpacing
+            visible: group.expanded
+            height: group.expanded ? implicitHeight : 0
+
+            Repeater {
+                model: mainController.tracked_apps.getComponentsByCategory(group.category)
+                delegate: ComponentCheckbox {
+                    glassMode: group.glassMode
+                    componentId: model.id
+                    componentName: model.name
+                    componentStatus: model.status
+                    componentStatusText: model.statusText
+                    componentDescription: model.description
+                    componentIcon: model.icon
+                    componentSupportsLiveReload: model.supportsLiveReload
+                    isSelected: group._localSelection.indexOf(model.id) !== -1
+                    isAvailable: group.availableComponents.indexOf(model.id) !== -1
+                    onToggled: {
+                        var idx = group._localSelection.indexOf(componentId)
+                        if (checked && idx === -1) {
+                            group._localSelection.push(componentId)
+                        } else if (!checked && idx !== -1) {
+                            group._localSelection.splice(idx, 1)
+                        }
+                        group.selectedComponents = group._localSelection.slice()
+                        group.selectionChanged()
+                    }
+                }
+            }
+        }
+
+        Behavior on componentsLayout.height {
+            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+        }
+    }
+
+    background: Rectangle {
+        radius: 6
+        border.width: 1
+        color: group.glassMode ? Qt.rgba(1, 1, 1, 0.08) : group.safeColor("viewColor", "#ffffff")
+        border.color: group.glassMode
+            ? Qt.rgba(1, 1, 1, 0.18)
+            : Qt.rgba(0.15, 0.15, 0.15, 0.18)
+    }
 }

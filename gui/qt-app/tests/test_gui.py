@@ -589,12 +589,35 @@ def test_qml_no_tooltip_property() -> None:
 # 20. QML Main.qml uses function syntax for Connections
 # ─────────────────────────────────────────────────────────────────────────────
 def test_qml_connections_function_syntax() -> None:
-    """Connections must use function syntax (onFoo deprecated in Qt 6.8+)."""
+    """Connections must use function syntax (onFoo: handler is deprecated in Qt 6.8+)."""
+    import re
+
     main_qml = (PROJECT_ROOT / "qml" / "Main.qml").read_text()
-    # Should have function onFoo syntax, not onFoo: handler property syntax
-    assert "function onIsGlassChanged" in main_qml, (
-        "Connections should use function syntax for Qt 6.12 compatibility"
-    )
+    assert "Connections {" in main_qml, "Main.qml should use a Connections block"
+
+    blocks = []
+    for match in re.finditer(r"Connections\s*\{", main_qml):
+        i = match.end()
+        depth = 1
+        start = i
+        while i < len(main_qml) and depth > 0:
+            if main_qml[i] == "{":
+                depth += 1
+            elif main_qml[i] == "}":
+                depth -= 1
+            i += 1
+        blocks.append(main_qml[start : i - 1])
+
+    assert blocks, "Expected at least one Connections block"
+    for block in blocks:
+        for line in block.split("\n"):
+            assert not re.match(r"\s*on[A-Z]\w*\s*:", line), (
+                "Connections handlers must use 'function onFoo(...)' syntax, "
+                f"not '{line.strip()}'"
+            )
+        assert re.search(r"function\s+on\w+\s*\(", block), (
+            "Each Connections block must declare its handlers with function syntax"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -614,17 +637,66 @@ def test_qml_has_safecolor_helper() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 22. Main.qml glassOpacity property (semi-transparent widgets in glass mode)
+# 22. Main.qml glass styling (translucent, driven by glassMode)
 # ─────────────────────────────────────────────────────────────────────────────
-def test_main_has_glass_opacity_property() -> None:
-    """Main.qml must define glassOpacity for semi-transparent widgets in glass mode."""
+def test_main_has_glass_styling() -> None:
+    """Main.qml must drive a translucent glass look from the glassMode flag."""
     main_qml = (PROJECT_ROOT / "qml" / "Main.qml").read_text()
-    assert "glassOpacity" in main_qml, (
-        "Main.qml must define glassOpacity property for semi-transparent widgets"
+    assert "property bool glassMode: themeController.isGlass" in main_qml, (
+        "Main.qml must expose glassMode bound to themeController.isGlass"
     )
-    assert "opacity: root.glassOpacity" in main_qml or \
-           'opacity: root.glassOpacity' in main_qml, (
-        "At least one Card must bind to root.glassOpacity for transparency"
+    # Translucent colors are how glass is implemented (no opaque alpha=1 fills).
+    assert "Qt.rgba(" in main_qml, (
+        "Main.qml must use translucent Qt.rgba() colors for glass mode"
+    )
+    # The page must paint its own glass panel / background, not rely on the
+    # Kirigami default Platform.Theme.backgroundColor (which was the white bug).
+    assert "background: Rectangle" in main_qml, (
+        "Main.qml page must define an explicit background Rectangle"
+    )
+    assert main_qml.count("root.glassMode") >= 2, (
+        "The page/window background must react to glassMode"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 22b. Selection and application are separate actions
+# ─────────────────────────────────────────────────────────────────────────────
+def test_selection_is_separate_from_apply() -> None:
+    """Clicking a profile selects it; applying requires the explicit Apply button."""
+    main_qml = (PROJECT_ROOT / "qml" / "Main.qml").read_text()
+    assert "property string selectedProfile" in main_qml, (
+        "Main.qml must track a pending selectedProfile"
+    )
+    # The radio delegate only sets the selection...
+    assert "onProfileClicked: root.selectedProfile = profileName" in main_qml, (
+        "Clicking a profile must only select it, not apply it"
+    )
+    # ...and a dedicated Apply button performs the (slow) application.
+    assert "profileController.applyProfile(root.selectedProfile)" in main_qml, (
+        "An explicit Apply button must trigger profile application"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 22c. Theme controller switches the application palette
+# ─────────────────────────────────────────────────────────────────────────────
+def test_theme_controller_applies_palette() -> None:
+    """Glass/dark themes must switch the app palette (else controls stay light)."""
+    controller_path = SRC_DIR / "theme_controller.py"
+    content = controller_path.read_text()
+    assert "def _apply_palette" in content, (
+        "ThemeController must define _apply_palette"
+    )
+    assert "setPalette(" in content, (
+        "ThemeController must apply the palette via QGuiApplication.setPalette"
+    )
+    assert "_apply_palette(dark=True)" in content, (
+        "Glass theme must apply a dark palette so QQC2 controls match"
+    )
+    # The window colour must be owned by QML, not overridden from Python.
+    assert "_window.setColor(" not in content, (
+        "ThemeController must not call QWindow.setColor() — it fights the QML binding"
     )
 
 

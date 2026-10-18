@@ -13,101 +13,94 @@ Kirigami.AbstractCard {
         return c && c.valid ? c : fallback
     }
 
-    Layout.preferredWidth: 160
-    Layout.minimumWidth: 140
-    Layout.maximumWidth: 200
+    Layout.preferredWidth: 180
+    Layout.minimumWidth: 150
+    Layout.maximumWidth: 240
+
     property string profileName: ""
+    // isActive: profile currently applied to the system
     property bool isActive: false
+    // selected: profile the user picked (not applied yet)
+    property bool selected: false
     property int componentCount: 0
+    property bool glassMode: false
+
+    readonly property string displayName: profileName === "glass" ? qsTr("Glass")
+        : profileName === "paper" ? qsTr("Paper")
+        : profileName
+
+    readonly property color accentColor: safeColor("highlightColor", "#3daee9")
+    readonly property color positiveColor: safeColor("positiveTextColor", "#27ae60")
+    readonly property color fgColor: glassMode ? "#f0f0f0" : safeColor("textColor", "#1f1f1f")
+    readonly property color dimColor: glassMode ? Qt.rgba(1, 1, 1, 0.80) : Qt.rgba(0.15, 0.15, 0.15, 0.65)
 
     signal profileClicked(string profileName)
 
     contentItem: ColumnLayout {
-        Layout.fillWidth: true
-        spacing: Platform.Units.smallSpacing
+        spacing: 2
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.alignment: Qt.AlignHCenter
             spacing: Platform.Units.smallSpacing
 
-            Kirigami.Icon {
-                source: "preferences-desktop-theme"
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
-                color: isActive ? safeColor("highlightColor", "#2980b9") : safeColor("textColor", "#1f1f1f")
-                opacity: isActive ? 1.0 : 0.5
+            RadioButton {
+                Layout.fillWidth: true
+                checked: card.isActive || card.selected
+                enabled: card.enabled
+                text: card.displayName
+                font.bold: card.isActive
+                onClicked: card.profileClicked(card.profileName)
+                palette.windowText: card.fgColor
+                palette.text: card.fgColor
             }
 
-            RadioButton {
-                id: radio
-                checked: isActive
-                text: profileName === "glass" ? qsTr("Glass") :
-                      profileName === "paper" ? qsTr("Paper") : profileName
-                enabled: enabled
-                onClicked: {
-                    if (!isActive && enabled) {
-                        profileClicked(profileName)
-                    }
-                }
+            Kirigami.Icon {
+                visible: card.isActive
+                source: "dialog-ok-apply"
+                color: card.positiveColor
+                Layout.preferredWidth: 18
+                Layout.preferredHeight: 18
+                Layout.alignment: Qt.AlignVCenter
             }
         }
 
         Label {
-            Layout.alignment: Qt.AlignHCenter
-            text: qsTr("%1 components").arg(componentCount)
+            Layout.leftMargin: Platform.Units.gridUnit * 1.6
+            text: qsTr("%1 components").arg(card.componentCount)
             font.pointSize: Platform.Units.smallSpacing
-            color: safeColor("textColor", "#1f1f1f")
-            opacity: 0.6
+            color: card.dimColor
+        }
+
+        Label {
+            Layout.leftMargin: Platform.Units.gridUnit * 1.6
+            visible: card.isActive
+            text: qsTr("Active now")
+            font.pointSize: Platform.Units.smallSpacing
+            color: card.positiveColor
+        }
+
+        Label {
+            Layout.leftMargin: Platform.Units.gridUnit * 1.6
+            visible: !card.isActive && card.selected
+            text: qsTr("Press Apply to use")
+            font.pointSize: Platform.Units.smallSpacing
+            color: card.accentColor
         }
     }
 
     background: Rectangle {
-        id: bgRect
-        implicitWidth: 160
-        implicitHeight: 80
         radius: 8
-        border.width: isActive ? 2 : 1
-        color: "transparent"
-        opacity: 1.0
+        implicitWidth: 180
+        implicitHeight: 96
+        border.width: (card.isActive || card.selected) ? 2 : 1
+        border.color: card.isActive ? card.positiveColor
+            : card.selected ? card.accentColor
+            : (card.glassMode ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0.15, 0.15, 0.15, 0.22))
+        color: card.isActive ? Qt.rgba(card.positiveColor.r, card.positiveColor.g, card.positiveColor.b, 0.16)
+            : card.selected ? Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.16)
+            : (card.glassMode ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
 
-        Behavior on border.color { ColorAnimation { duration: 200 } }
-        Behavior on color { ColorAnimation { duration: 200 } }
-        Behavior on opacity { NumberAnimation { duration: 200 } }
-    }
-
-    // Update background properties when theme/state changes
-    Binding {
-        target: bgRect
-        property: "radius"
-        value: 8
-    }
-    Binding {
-        target: bgRect
-        property: "border.color"
-        value: isActive ? safeColor("highlightColor", "#2980b9") : (enabled ? safeColor("viewColor", "#e0e0e0") : safeColor("disabledTextColor", "#888888"))
-    }
-    Binding {
-        target: bgRect
-        property: "color"
-        value: isActive ? safeColor("highlightColor", "#2980b9") : "transparent"
-    }
-    Binding {
-        target: bgRect
-        property: "opacity"
-        value: isActive ? 0.1 : (enabled ? 1.0 : 0.5)
-    }
-    Binding {
-        target: bgRect
-        property: "border.width"
-        value: isActive ? 2 : 1
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        hoverEnabled: true
-        enabled: enabled
-        onEntered: if (enabled) bgRect.border.color = isActive ? safeColor("highlightColor", "#2980b9") : safeColor("hoverColor", "#cccccc")
-        onExited: if (enabled) bgRect.border.color = isActive ? safeColor("highlightColor", "#2980b9") : safeColor("viewColor", "#e0e0e0")
+        Behavior on border.color { ColorAnimation { duration: 150 } }
+        Behavior on color { ColorAnimation { duration: 150 } }
     }
 }
