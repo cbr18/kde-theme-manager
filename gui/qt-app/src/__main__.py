@@ -151,6 +151,13 @@ def main() -> int:
     main_window = engine.rootObjects()[0]
     register_system_tray(engine, main_window)
 
+    # Apply theme synchronously before showing (avoid light flash)
+    # sync_theme was triggered during initialize(); force-apply now
+    # to ensure glass/paper theme is active before the window appears
+    theme_controller._apply_theme()
+
+    main_window.show()
+
     return app.exec()
 
 

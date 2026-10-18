@@ -24,6 +24,8 @@ Kirigami.ApplicationWindow {
 
     // Подключение ThemeController к окну
     Component.onCompleted: {
+        console.log("[DEBUG] profiles model:", profileController.profiles.length, "active:", profileController.activeProfile)
+        console.log("[DEBUG] isGlass:", themeController.isGlass, "theme:", themeController.currentTheme)
         themeController.set_window(root)
         profileController.refresh()
         wallpaperController.refresh()
@@ -70,6 +72,11 @@ Kirigami.ApplicationWindow {
                 Layout.rightMargin: Platform.Units.largeSpacing
                 Layout.topMargin: Platform.Units.largeSpacing
 
+                background: Rectangle {
+                    color: root.glassMode ? "transparent" : safeColor("viewColor", "#e0e0e0")
+                    radius: 8
+                }
+
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Platform.Units.smallSpacing
@@ -89,21 +96,23 @@ Kirigami.ApplicationWindow {
                     }
 
                     RowLayout {
-    spacing: Platform.Units.mediumSpacing
-    Repeater {
-        model: profileController.profiles
-        delegate: ProfileRadioButton {
-            profileName: model.name !== undefined ? model.name : ""
-            isActive: model.isActive !== undefined ? model.isActive : false
-            componentCount: model.componentCount !== undefined ? model.componentCount : 0
-            onProfileClicked: {
-                if (!model.isActive) {
-                    profileController.applyProfile(model.name)
-                }
-            }
-        }
-    }
-}
+                        Layout.fillWidth: true
+                        spacing: Platform.Units.mediumSpacing
+
+                        Repeater {
+                            model: profileController.profiles
+                            delegate: ProfileRadioButton {
+                                profileName: model.name !== undefined ? model.name : ""
+                                isActive: model.isActive !== undefined ? model.isActive : false
+                                componentCount: model.componentCount !== undefined ? model.componentCount : 0
+                                onProfileClicked: {
+                                    if (!model.isActive) {
+                                        profileController.applyProfile(model.name)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -115,11 +124,17 @@ Kirigami.ApplicationWindow {
                 Layout.rightMargin: Platform.Units.largeSpacing
                 Layout.topMargin: Platform.Units.mediumSpacing
 
+                background: Rectangle {
+                    color: root.glassMode ? "transparent" : safeColor("viewColor", "#e0e0e0")
+                    radius: 8
+                }
+
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Platform.Units.smallSpacing
 
                     RowLayout {
+                        Layout.fillWidth: true
                         Kirigami.Heading {
                             level: 3
                             text: qsTr("Available Profiles")
@@ -145,7 +160,7 @@ Kirigami.ApplicationWindow {
                             }
                             onDeleteClicked: {
                                 if (settingsController.confirmBeforeApply) {
-                                    confirmDialog.text = qsTr("Delete profile \"%1\"?", model.name)
+                                    confirmDialog.targetProfile = model.name
                                     confirmDialog.open()
                                 } else {
                                     profileController.deleteProfile(model.name)
@@ -170,11 +185,17 @@ Kirigami.ApplicationWindow {
                 Layout.topMargin: Platform.Units.mediumSpacing
                 Layout.bottomMargin: Platform.Units.largeSpacing
 
+                background: Rectangle {
+                    color: root.glassMode ? "transparent" : safeColor("viewColor", "#e0e0e0")
+                    radius: 8
+                }
+
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Platform.Units.smallSpacing
 
                     RowLayout {
+                        Layout.fillWidth: true
                         Kirigami.Heading {
                             level: 3
                             text: qsTr("Wallpaper")
@@ -293,7 +314,7 @@ Kirigami.ApplicationWindow {
 
         ColumnLayout {
             Layout.fillWidth: true
-                opacity: root.glassOpacity
+            opacity: root.glassOpacity
             Layout.minimumWidth: 300
             TextField {
                 id: nameField
@@ -366,6 +387,11 @@ Kirigami.ApplicationWindow {
                 // Components that will be applied
                 Kirigami.Card {
                     Layout.fillWidth: true
+                    opacity: root.glassOpacity
+                    background: Rectangle {
+                        color: root.glassMode ? "transparent" : safeColor("viewColor", "#e0e0e0")
+                        radius: 8
+                    }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Platform.Units.smallSpacing
@@ -394,6 +420,11 @@ Kirigami.ApplicationWindow {
                 // Diff preview (collapsible)
                 Kirigami.Card {
                     Layout.fillWidth: true
+                    opacity: root.glassOpacity
+                    background: Rectangle {
+                        color: root.glassMode ? "transparent" : safeColor("viewColor", "#e0e0e0")
+                        radius: 8
+                    }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Platform.Units.smallSpacing
@@ -480,5 +511,4 @@ Kirigami.ApplicationWindow {
         }
         return icons[compId] || "application-x-executable"
     }
-
 }

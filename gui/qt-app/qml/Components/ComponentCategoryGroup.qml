@@ -17,6 +17,11 @@ Kirigami.Card {
     property var selectedComponents: []
     property var availableComponents: []
 
+    background: Rectangle {
+        color: glassMode ? "transparent" : safeColor("viewColor", "#e0e0e0")
+        radius: 6
+    }
+
     // Local selection state (mirrors selectedComponents but mutable)
     property var _localSelection: []
 

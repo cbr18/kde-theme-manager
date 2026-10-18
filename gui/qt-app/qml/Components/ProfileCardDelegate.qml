@@ -129,6 +129,11 @@ Kirigami.AbstractCard {
         }
     }
 
+    background: Rectangle {
+        color: glassMode ? "transparent" : safeColor("viewColor", "#e0e0e0")
+        radius: 8
+    }
+
     // Signals
     signal applyClicked(string profileName)
     signal previewClicked(string profileName)
