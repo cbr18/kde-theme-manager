@@ -53,6 +53,9 @@ check_untyped_defs = true
 qt_api = "pyside6"
 testpaths = ["tests"]
 
+[tool.setuptools.packages.find]
+where = ["."]
+
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"

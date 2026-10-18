@@ -7,6 +7,8 @@ Provides:
 - Minimize to tray instead of close
 """
 
+from __future__ import annotations
+
 import os
 from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer, QCoreApplication
 from PySide6.QtGui import QGuiApplication, QIcon, QAction
