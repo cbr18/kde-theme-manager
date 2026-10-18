@@ -132,6 +132,11 @@ class SystemTrayController(QObject):
         except Exception:
             raise RuntimeError("System tray not available")
 
+        # System tray requires QApplication (QWidget), not just QGuiApplication
+        from PySide6.QtWidgets import QApplication
+        if not QApplication.instance():
+            raise RuntimeError("QApplication required for system tray")
+
         try:
             self._tray_icon = QSystemTrayIcon()
         except Exception as e:
@@ -237,6 +242,12 @@ class SystemTrayController(QObject):
 
 def register_system_tray(engine, main_window) -> None:
     """Зарегистрировать SystemTrayController в QML."""
+    from PySide6.QtWidgets import QApplication
+    if not QApplication.instance():
+        # QGuiApplication (QtQuick/QML only) - skip system tray to avoid QWidget crash
+        print("System tray skipped: QApplication not available (pure QML mode)")
+        return None
+
     controller = SystemTrayController.instance()
     controller.set_main_window(main_window)
     controller.initialize()

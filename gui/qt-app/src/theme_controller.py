@@ -7,7 +7,7 @@ Theme Controller — Dogfooding: применяет активный профи�
 import os
 import subprocess
 from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer, Qt
-from PySide6.QtGui import QGuiApplication, QWindow
+from PySide6.QtGui import QGuiApplication, QWindow, QColor, QPalette
 
 
 class ThemeController(QObject):
@@ -93,7 +93,11 @@ class ThemeController(QObject):
             return self._current_theme
 
         palette = QGuiApplication.palette()
-        bg = palette.color(palette.ColorRole.Window)
+        bg = palette.color(QPalette.ColorRole.Window)
+        if not bg.isValid():
+            # Fallback: detect from platform theme hint
+            theme = QGuiApplication.styleHints().colorScheme()
+            return "dark" if theme == Qt.ColorMode.Dark else "light"
         luminance = (0.299 * bg.red() + 0.587 * bg.green() + 0.114 * bg.blue()) / 255
         return "dark" if luminance < 0.5 else "light"
 
@@ -112,9 +116,13 @@ class ThemeController(QObject):
         if not self._window:
             return
 
-        # Включить прозрачность фона (без изменения window flags)
-        self._window.setAttribute(Qt.WA_TranslucentBackground, True)
-        self._window.setAttribute(Qt.WA_NoSystemBackground, True)
+        # QWindow.setColor might not be available in PySide6;
+        # transparency is handled in QML (color: "transparent").
+        # KWin blur requested via D-Bus below.
+        try:
+            self._window.setColor(QColor(0, 0, 0, 0))
+        except AttributeError:
+            pass
 
         # Для Wayland: запрашиваем blur через KWin (non-blocking)
         QTimer.singleShot(100, self._request_kwin_blur)
@@ -140,10 +148,12 @@ class ThemeController(QObject):
         self._apply_light_theme()
 
     def _disable_window_blur(self) -> None:
-        """Отключить прозрачность и blur."""
+        """Disable transparency."""
         if self._window:
-            self._window.setAttribute(Qt.WA_TranslucentBackground, False)
-            self._window.setAttribute(Qt.WA_NoSystemBackground, False)
+            try:
+                self._window.setColor(QColor(255, 255, 255, 255))
+            except AttributeError:
+                pass
 
     def _apply_dark_theme(self) -> None:
         """Тёмная тема."""

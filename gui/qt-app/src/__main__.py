@@ -11,9 +11,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from PySide6.QtGui import QGuiApplication, QIcon
+from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtCore import QUrl, QCoreApplication, Qt
-from PySide6.QtQuickControls2 import QQuickStyle
+from PySide6.QtGui import QPalette, QColor
 
 # Импорт контроллеров
 from controllers import MainController, register_controllers
@@ -25,27 +26,57 @@ from core.protocol import Result, ProfileInfo, Component, AppStatus, AppSettings
 
 
 def _show_help() -> int:
-    """Show help via QMessageBox.about (requires QtWidgets/QGuiApplication)."""
-    from PySide6.QtWidgets import QMessageBox
+    """Print help to stdout (avoids QWidget/QApplication dependency)."""
+    print(
+        """KDE Theme Profile Manager v0.2.0-dev
+A Qt/QML-based theme profile manager for KDE Plasma.
 
-    app = QGuiApplication(sys.argv)
-    QMessageBox.about(
-        None,
-        "KDE Theme Manager",
-        (
-            "<h1>KDE Theme Profile Manager</h1>"
-            "<p><b>Version:</b> 0.2.0-dev</p>"
-            "<p>A Qt/QML-based theme profile manager for KDE Plasma.</p>"
-            "<p><b>Usage:</b></p>"
-            "<pre>kde-theme-manager [options]</pre>"
-            "<p><b>Options:</b></p>"
-            "<ul>"
-            "<li><code>--help, -h</code> — Show this help message</li>"
-            "<li><code>--version</code> — Show version and exit</li>"
-            "</ul>"
-        ),
+Usage: kde-theme-manager [options]
+
+Options:
+  --help, -h     Show this help message
+  --version      Show version and exit
+
+Requires KDE Plasma 6 + Kirigami (org.kde.kirigami, org.kde.desktop QML modules).
+For PySide6 bundled Qt, ensure system QML import paths are available.
+"""
     )
     return 0
+
+
+def _find_system_qml_paths() -> list[str]:
+    """Find system QML import directories (Qt6, Qt5) for KDE modules."""
+    candidates = [
+        "/usr/lib/qt6/qml",
+        "/usr/lib64/qt6/qml",
+        "/usr/lib/qt5/qml",
+        "/usr/lib64/qt5/qml",
+        "/usr/share/qt6/qml",
+        "/usr/share/qt5/qml",
+    ]
+    return [p for p in candidates if Path(p).is_dir()]
+
+
+def _setup_palette(app: QApplication) -> None:
+    """Ensure valid palette colors for Kirigami.Theme.
+
+    PySide6 bundles its own Qt; the Kirigami QML singleton reads colors
+    from the QApplication palette. Without this, Kirigami.Theme may return
+    invalid QColor (QVariant(Invalid)), producing QQuickColorValueType warnings.
+    """
+    palette = app.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(239, 240, 243))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor(31, 31, 31))
+    palette.setColor(QPalette.ColorRole.Base, QColor(255, 255, 255))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(245, 245, 245))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(255, 255, 255))
+    palette.setColor(QPalette.ColorRole.Text, QColor(31, 31, 31))
+    palette.setColor(QPalette.ColorRole.Button, QColor(239, 240, 243))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor(31, 31, 31))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(41, 128, 185))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
+    palette.setColor(QPalette.ColorRole.Link, QColor(41, 128, 185))
+    app.setPalette(palette)
 
 
 def main() -> int:
@@ -65,18 +96,23 @@ def main() -> int:
     QCoreApplication.setOrganizationDomain("github.com/cbr18/kde-theme-manager")
 
     # Включаем High DPI scaling
-    QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
 
-    # Стиль — Kirigami использует свой, но на всякий случай
-    QQuickStyle.setStyle("org.kde.desktop")
-
-    app = QGuiApplication(sys.argv)
+    app = QApplication(sys.argv)
     app.setWindowIcon(QIcon.fromTheme("preferences-desktop-theme"))
+
+    # Ensure valid palette for Kirigami (PySide6 bundled Qt may lack KDE palette)
+    _setup_palette(app)
 
     # QML Engine
     engine = QQmlApplicationEngine()
+
+    # Добавляем системные пути для QML импортов (Kirigami, org.kde.desktop)
+    # PySide6 bundles its own Qt — system KDE QML modules need explicit paths
+    for sys_qml_path in _find_system_qml_paths():
+        engine.addImportPath(sys_qml_path)
 
     # Регистрация контроллеров
     main_controller = register_controllers(engine)
@@ -95,7 +131,6 @@ def main() -> int:
     # Инициализация контроллеров ДО загрузки QML
     main_controller.initialize()
 
-    # Добавление путей для QML импортов
     qml_path = Path(__file__).parent.parent / "qml"
     engine.addImportPath(str(qml_path))
 

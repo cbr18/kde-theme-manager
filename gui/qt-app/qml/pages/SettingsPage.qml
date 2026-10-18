@@ -44,7 +44,9 @@ Kirigami.Page {
                             text: qsTr("Apply ALL components (default)")
                             checked: settingsController.defaultComponentsMode === "all"
                             onToggled: if (checked) settingsController.defaultComponentsMode = "all"
-                            tooltip: qsTr("Apply all tracked components when switching profiles")
+                            hoverEnabled: true
+                            ToolTip.text: qsTr("Apply all tracked components when switching profiles")
+                            ToolTip.visible: hovered
                         }
 
                         Kirigami.RadioButton {
@@ -52,7 +54,9 @@ Kirigami.Page {
                             text: qsTr("Apply SELECTED components only")
                             checked: settingsController.defaultComponentsMode === "custom"
                             onToggled: if (checked) settingsController.defaultComponentsMode = "custom"
-                            tooltip: qsTr("Choose which components to apply per profile")
+                            hoverEnabled: true
+                            ToolTip.text: qsTr("Choose which components to apply per profile")
+                            ToolTip.visible: hovered
                         }
                     }
                 }

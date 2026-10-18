@@ -34,8 +34,7 @@ Kirigami.AbstractCard {
                 spacing: 2
 
                 Label {
-                    text: model.name === "glass" ? qsTr("Glass") :
-                          model.name === "paper" ? qsTr("Paper") : model.name
+                    text: model.name ? (model.name === "glass" ? qsTr("Glass") : model.name === "paper" ? qsTr("Paper") : model.name) : ""
                     font.bold: true
                     font.pointSize: Platform.Units.mediumSpacing
                 }
@@ -53,7 +52,7 @@ Kirigami.AbstractCard {
 
             Kirigami.Icon {
                 source: "dialog-ok-apply"
-                visible: model.isActive
+                visible: model.isActive !== undefined ? model.isActive : false
                 color: Kirigami.Theme.positiveTextColor
                 Layout.preferredWidth: Platform.Units.iconSizes.medium
                 Layout.preferredHeight: Platform.Units.iconSizes.medium
@@ -101,7 +100,9 @@ Kirigami.AbstractCard {
                 icon.name: "document-preview"
                 flat: true
                 visible: !model.isActive
-                tooltip: qsTr("Preview changes before applying")
+                hoverEnabled: true
+                ToolTip.text: qsTr("Preview changes before applying")
+                ToolTip.visible: hovered
                 onClicked: previewClicked(model.name)
             }
 

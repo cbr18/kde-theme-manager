@@ -500,3 +500,98 @@ def test_resources_icons_not_empty() -> None:
     assert icons_dir.exists(), "resources/icons/ directory must exist"
     contents = list(icons_dir.iterdir())
     assert len(contents) > 0, "resources/icons/ must not be empty"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 15. theme-profile --components support
+# ─────────────────────────────────────────────────────────────────────────────
+def test_theme_profile_has_components_support() -> None:
+    """bash theme-profile must support --components= flag (required by GUI)."""
+    theme_profile = Path(__file__).resolve().parents[3] / "files" / "bin" / "theme-profile"
+    if not theme_profile.exists():
+        pytest.skip("theme-profile not found at expected path")
+    content = theme_profile.read_text()
+    assert "COMPONENT_PATHS" in content, "theme-profile must define COMPONENT_PATHS"
+    assert "parse_components_arg" in content, "theme-profile must have parse_components_arg"
+    assert "build_tracked_paths" in content, "theme-profile must have build_tracked_paths"
+    assert "--components" in content, "theme-profile must support --components flag"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 16. __main__.py uses QApplication (not QGuiApplication-only)
+# ─────────────────────────────────────────────────────────────────────────────
+def test_main_uses_qapplication() -> None:
+    """__main__.py must import QApplication (for system tray support)."""
+    main_path = SRC_DIR / "__main__.py"
+    content = main_path.read_text()
+    assert "QApplication" in content, (
+        "__main__.py must use QApplication (supports both QML and Widgets/tray)"
+    )
+    assert "QQuickStyle.setStyle" not in content, (
+        "QQuickStyle.setStyle('org.kde.desktop') removed (causes QWidget crash)"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 17. system_tray.py guards against missing QApplication
+# ─────────────────────────────────────────────────────────────────────────────
+def test_system_tray_guard() -> None:
+    """register_system_tray must check QApplication.instance() before creating QWidgets."""
+    import ast
+
+    path = SRC_DIR / "system_tray.py"
+    tree = ast.parse(path.read_text())
+
+    # Find register_system_tray function
+    found_qapp_check = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "register_system_tray":
+            source = ast.get_source_segment(path.read_text(), node)
+            if source and "QApplication" in source:
+                found_qapp_check = True
+    assert found_qapp_check, (
+        "register_system_tray must check for QApplication before creating QSystemTrayIcon"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 18. theme_controller.py uses setColor, not setAttribute
+# ─────────────────────────────────────────────────────────────────────────────
+def test_theme_controller_no_setattribute() -> None:
+    """ThemeController must not use QWindow.setAttribute (not available in PySide6)."""
+    path = SRC_DIR / "theme_controller.py"
+    content = path.read_text()
+    assert "setAttribute" not in content, (
+        "QWindow.setAttribute doesn't exist in PySide6 — use setColor with try/except"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 19. QML fixed: no deprecated tooltip property
+# ─────────────────────────────────────────────────────────────────────────────
+def test_qml_no_tooltip_property() -> None:
+    """QML files must use ToolTip attached property, not 'tooltip:' shorthand."""
+    qml_dir = PROJECT_ROOT / "qml"
+    for qml_file in qml_dir.rglob("*.qml"):
+        content = qml_file.read_text()
+        # 'tooltip:' (without ToolTip. prefix) is invalid in Qt 6.12
+        lines = content.split("\n")
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("tooltip:") or stripped.startswith("tooltip "):
+                pytest.fail(
+                    f"{qml_file.name}:{i} uses 'tooltip:' property "
+                    f"(use ToolTip.text + ToolTip.visible instead)"
+                )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 20. QML Main.qml uses function syntax for Connections
+# ─────────────────────────────────────────────────────────────────────────────
+def test_qml_connections_function_syntax() -> None:
+    """Connections must use function syntax (onFoo deprecated in Qt 6.8+)."""
+    main_qml = (PROJECT_ROOT / "qml" / "Main.qml").read_text()
+    # Should have function onFoo syntax, not onFoo: handler property syntax
+    assert "function onIsGlassChanged" in main_qml, (
+        "Connections should use function syntax for Qt 6.12 compatibility"
+    )

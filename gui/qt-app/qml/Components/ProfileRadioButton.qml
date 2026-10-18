@@ -59,7 +59,7 @@ Kirigami.AbstractCard {
         id: bgRect
         implicitWidth: 160
         implicitHeight: 80
-        radius: Platform.Units.largeRadius
+        radius: 8
         border.width: isActive ? 2 : 1
         color: "transparent"
         opacity: 1.0
@@ -73,7 +73,7 @@ Kirigami.AbstractCard {
     Binding {
         target: bgRect
         property: "radius"
-        value: Platform.Units.largeRadius
+        value: 8
     }
     Binding {
         target: bgRect

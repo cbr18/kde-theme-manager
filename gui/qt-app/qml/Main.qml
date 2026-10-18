@@ -28,13 +28,13 @@ Kirigami.ApplicationWindow {
     // Поддержка glass темы: прозрачный фон
     color: themeController.isGlass ? "transparent" : Kirigami.Theme.backgroundColor
 
-    // Реакция на смену темы
-    Connections {
-        target: themeController
-        onIsGlassChanged: {
-            root.color = themeController.isGlass ? "transparent" : Kirigami.Theme.backgroundColor
-        }
-    }
+     // Реакция на смену темы
+     Connections {
+         target: themeController
+         function onIsGlassChanged() {
+             root.color = themeController.isGlass ? "transparent" : Kirigami.Theme.backgroundColor
+         }
+     }
 
     // Глобальные настройки
     property bool isDarkTheme: Kirigami.Theme.highlightColor.r < 0.5
@@ -79,9 +79,9 @@ Kirigami.ApplicationWindow {
     Repeater {
         model: profileController.profiles
         delegate: ProfileRadioButton {
-            profileName: model.name
-            isActive: model.isActive
-            componentCount: model.componentCount
+            profileName: model.name !== undefined ? model.name : ""
+            isActive: model.isActive !== undefined ? model.isActive : false
+            componentCount: model.componentCount !== undefined ? model.componentCount : 0
             onProfileClicked: {
                 if (!model.isActive) {
                     profileController.applyProfile(model.name)
