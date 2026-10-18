@@ -28,12 +28,28 @@
 
 ## Contents / Состав
 
+### Bash Toolkit (core)
+
 | Script | Purpose |
 |--------|---------|
 | `theme-profile` | CLI: save/apply/list/diff/status профилей |
 | `theme-menu` | wofi‑menu for applying, saving, restarting Plasma, status |
 | `wallpaper-picker` | Choose wallpaper via wofi with thumbnail preview |
 | `wallpaper-next` / `wallpaper-prev` | Cycle wallpapers |
+
+### GUI Application (optional)
+
+| Component | Purpose |
+|-----------|---------|
+| `gui/qt-app/` | **KDE Theme Manager** — native Qt/QML + Kirigami desktop app with profile cards, wallpaper picker, settings, and system tray |
+
+```bash
+cd gui/qt-app
+uv venv && uv pip install -e ".[dev]"
+uv run kde-theme-manager  # or: python -m src
+```
+
+Requires KDE Plasma 6 + Kirigami. See `gui/qt-app/README.md` for details.
 
 ## Dependencies / Зависимости
 

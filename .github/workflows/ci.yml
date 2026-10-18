@@ -7,26 +7,40 @@ on:
     branches: [main, master]
 
 jobs:
-  test:
+  test-bash:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Syntax check (bash -n)
         run: |
           for f in files/bin/* scripts/*.sh tests/*.sh; do
             bash -n "$f" || exit 1
           done
-
       - name: Shellcheck
-        run: |
-          shellcheck files/bin/* scripts/*.sh tests/*.sh
-
+        run: shellcheck files/bin/* scripts/*.sh tests/*.sh
       - name: Run test suite
         run: bash tests/test-scripts.sh
+
+  test-python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gui/qt-app
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv pip install -e ".[dev]" --python=$(uv python find 3.12)
+      - name: py_compile check
+        run: python -m py_compile src/*.py src/core/*.py src/core/python_core.py tests/test_gui.py
+      - name: Run tests
+        run: python -m pytest tests/ -v

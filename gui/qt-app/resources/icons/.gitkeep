@@ -1,0 +1,4 @@
+# This directory contains application icons.
+# QML components use Kirigami/theme icons (e.g. "preferences-desktop-theme")
+# which are resolved at runtime from the system icon theme, so no fallback
+# PNG/SVG files are required at build time.

@@ -7,51 +7,66 @@ BACKUPS="$ROOT/backups"
 MANIFESTS="$ROOT/manifests"
 ACTIVE_FILE="$ROOT/active-profile"
 
-TRACKED_PATHS=(
-  ".config/kwinrc"
-  ".config/kwinrulesrc"
-  ".config/kdeglobals"
-  ".config/plasmarc"
-  ".config/plasma-org.kde.plasma.desktop-appletsrc"
-  ".config/plasmashellrc"
-  ".config/gtk-3.0/settings.ini"
-  ".config/gtk-3.0/gtk.css"
-  ".config/gtk-3.0/colors.css"
-  ".config/gtk-4.0/settings.ini"
-  ".config/gtk-4.0/gtk.css"
-  ".config/gtk-4.0/colors.css"
-  ".config/QtProject.conf"
-  ".config/Trolltech.conf"
-  ".config/klassy/klassyrc"
-  ".config/klassy/windecopresetsrc"
-  ".config/Kvantum/kvantum.kvconfig"
-  ".config/Kvantum/Sandstone"
-  ".config/alacritty/alacritty.toml"
-  ".config/alacritty/themes/noctalia.toml"
-  ".config/kitty/kitty.conf"
-  ".config/wofi/style.css"
-  ".config/wofi/wallpaper.css"
-  ".config/btop/btop.conf"
-  ".config/btop/themes/noctalia.theme"
-  ".config/btop/themes/paper.theme"
-  ".config/fastfetch/config.jsonc"
-  ".config/fastfetch/logo"
-  ".config/fastfetch/cat-source.jpg"
-  ".config/zed/settings.json"
-  ".config/zed/themes"
-  ".zen/gp0y8wrv.Default (release)/user.js"
-  ".zen/gp0y8wrv.Default (release)/chrome/userChrome.css"
-  ".zen/gp0y8wrv.Default (release)/chrome/userContent.css"
-  ".zen/gp0y8wrv.Default (release)/chrome/zen-themes.css"
-  ".config/Code/User/settings.json"
-  ".config/Cursor/User/settings.json"
-  ".config/obsidian/obsidian.json"
-  ".config/obsidian/Preferences"
-  "obsidian/vault/.obsidian/appearance.json"
-  ".local/share/color-schemes/ThemeProfilePaper.colors"
-  ".local/share/plasma/look-and-feel/glass"
-  ".local/share/plasma/look-and-feel/paper"
+# Component → path prefixes mapping (for --components filtering)
+# Keys match TrackedAppDef.id from Python core
+# Paths are colon-separated (no colons in paths)
+declare -A COMPONENT_PATHS=(
+  [kwin]=".config/kwinrc:.config/kwinrulesrc"
+  [plasma_shell]=".config/plasmarc:.config/plasmashellrc:.config/plasma-org.kde.plasma.desktop-appletsrc"
+  [kdeglobals]=".config/kdeglobals"
+  [gtk3]=".config/gtk-3.0/settings.ini:.config/gtk-3.0/gtk.css:.config/gtk-3.0/colors.css"
+  [gtk4]=".config/gtk-4.0/settings.ini:.config/gtk-4.0/gtk.css:.config/gtk-4.0/colors.css"
+  [qt5ct]=".config/QtProject.conf:.config/Trolltech.conf"
+  [klassy]=".config/klassy/klassyrc:.config/klassy/windecopresetsrc"
+  [kvantum]=".config/Kvantum/kvantum.kvconfig:.config/Kvantum/Sandstone"
+  [alacritty]=".config/alacritty/alacritty.toml:.config/alacritty/themes/noctalia.toml"
+  [kitty]=".config/kitty/kitty.conf"
+  [wofi]=".config/wofi/style.css:.config/wofi/wallpaper.css"
+  [btop]=".config/btop/btop.conf:.config/btop/themes/noctalia.theme:.config/btop/themes/paper.theme"
+  [fastfetch]=".config/fastfetch/config.jsonc:.config/fastfetch/logo:.config/fastfetch/cat-source.jpg"
+  [zed]=".config/zed/settings.json:.config/zed/themes"
+  [vscode]=".config/Code/User/settings.json"
+  [cursor]=".config/Cursor/User/settings.json"
+  [zen]=".zen/gp0y8wrv.Default (release)/user.js:.zen/gp0y8wrv.Default (release)/chrome/userChrome.css:.zen/gp0y8wrv.Default (release)/chrome/userContent.css:.zen/gp0y8wrv.Default (release)/chrome/zen-themes.css"
+  [obsidian]=".config/obsidian/obsidian.json:.config/obsidian/Preferences:obsidian/vault/.obsidian/appearance.json"
+  [color_schemes]=".local/share/color-schemes/ThemeProfilePaper.colors"
+  [look_and_feel]=".local/share/plasma/look-and-feel/glass:.local/share/plasma/look-and-feel/paper"
 )
+
+# Build TRACKED_PATHS from all components (default: all)
+build_tracked_paths() {
+  local components_str="${1:-}"
+  TRACKED_PATHS=()
+
+  if [ -z "$components_str" ] || [ "$components_str" = "all" ]; then
+    # All components
+    for comp in "${!COMPONENT_PATHS[@]}"; do
+      local paths_str="${COMPONENT_PATHS[$comp]}"
+      IFS=: read -ra paths_arr <<< "$paths_str"
+      for path in "${paths_arr[@]}"; do
+        TRACKED_PATHS+=("$path")
+      done
+    done
+  else
+    # Filter by requested components
+    IFS=',' read -ra COMPS <<< "$components_str"
+    for comp in "${COMPS[@]}"; do
+      comp="${comp// /}"  # trim spaces
+      if [ -n "${COMPONENT_PATHS[$comp]:-}" ]; then
+        local paths_str="${COMPONENT_PATHS[$comp]}"
+        IFS=: read -ra paths_arr <<< "$paths_str"
+        for path in "${paths_arr[@]}"; do
+          TRACKED_PATHS+=("$path")
+        done
+      else
+        echo "Warning: unknown component '$comp'" >&2
+      fi
+    done
+  fi
+}
+
+# Initialize with all components (can be overridden by --components)
+build_tracked_paths ""
 
 mkdir -p "$PROFILES" "$BACKUPS" "$MANIFESTS"
 
@@ -60,12 +75,34 @@ usage() {
 Usage:
   theme-profile status
   theme-profile list
-  theme-profile save NAME
-  theme-profile apply NAME
+  theme-profile save NAME [--components=comp1,comp2]
+  theme-profile apply NAME [--components=comp1,comp2]
   theme-profile diff A B
+
+Components: kwin, plasma_shell, kdeglobals, gtk3, gtk4, qt5ct,
+            klassy, kvantum, alacritty, kitty, wofi, btop,
+            fastfetch, zed, vscode, cursor, zen, obsidian,
+            color_schemes, look_and_feel
+
+Use --components=all for all (default).
 
 Profiles live in ~/.config/theme-profile/profiles.
 USAGE
+}
+
+# Parse --components=... from args, sets global PARSED_COMPONENTS and PARSED_ARGS
+parse_components_arg() {
+  local args=("$@")
+  PARSED_COMPONENTS=""
+  PARSED_ARGS=()
+
+  for arg in "${args[@]}"; do
+    if [[ "$arg" == --components=* ]]; then
+      PARSED_COMPONENTS="${arg#--components=}"
+    else
+      PARSED_ARGS+=("$arg")
+    fi
+  done
 }
 
 copy_tracked_into() {
@@ -349,7 +386,8 @@ case "$cmd" in
     find "$PROFILES" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
     ;;
   save)
-    name="${2:-}"
+    parse_components_arg "${@:2}"
+    name="${PARSED_ARGS[0]:-}"
     [ -n "$name" ] || {
       usage >&2
       exit 1
@@ -357,16 +395,18 @@ case "$cmd" in
     case "$name" in
       *[!A-Za-z0-9._-]*) echo "Invalid profile name: $name (allowed: A-Za-z0-9._-)" >&2; exit 1 ;;
     esac
+    build_tracked_paths "$PARSED_COMPONENTS"
     target="$PROFILES/$name"
     mkdir -p "$target"
     copy_tracked_into "$target"
     capture_kde_effects_state "$target"
     write_manifest "$target"
     printf '%s\n' "$name" > "$ACTIVE_FILE"
-    echo "Saved profile: $name"
+    echo "Saved profile: $name${PARSED_COMPONENTS:+ (components: $PARSED_COMPONENTS)}"
     ;;
   apply)
-    name="${2:-}"
+    parse_components_arg "${@:2}"
+    name="${PARSED_ARGS[0]:-}"
     [ -n "$name" ] || {
       usage >&2
       exit 1
@@ -376,6 +416,8 @@ case "$cmd" in
     esac
     # ВАЖНО: проверяем профиль ДО остановки plasma
     [ -d "$PROFILES/$name" ] || { echo "Profile not found: $name" >&2; exit 1; }
+    # Rebuild TRACKED_PATHS с выбранными компонентами
+    build_tracked_paths "$PARSED_COMPONENTS"
     ts="$(date +%Y%m%d-%H%M%S)"
     backup="$BACKUPS/pre-apply-$name-$ts"
     copy_tracked_into "$backup"
@@ -387,7 +429,7 @@ case "$cmd" in
     if restore_from_profile "$name"; then
       apply_live_hooks "$name"
       trap - ERR
-      echo "Applied profile: $name"
+      echo "Applied profile: $name${PARSED_COMPONENTS:+ (components: $PARSED_COMPONENTS)}"
       echo "Pre-apply backup: $backup"
     else
       start_plasma_shell
