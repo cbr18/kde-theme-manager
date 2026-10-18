@@ -178,7 +178,7 @@ apply_live_hooks() {
   local source="$PROFILES/$profile"
   local look_and_feel
 
-  look_and_feel="$(sed -n 's/^LookAndFeelPackage=//p' "$source/.config/kdeglobals" 2>/dev/null | head -1)"
+  look_and_feel="$(kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage "$source/.config/kdeglobals" 2>/dev/null || true)"
   if [ -n "$look_and_feel" ]; then
     kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage "$look_and_feel" >/dev/null 2>&1 || true
   fi
@@ -196,17 +196,6 @@ apply_live_hooks() {
   reconfigure_kwin_effect better_blur_dx
   apply_kitty_live "$source"
   start_plasma_shell
-  systemctl --user stop swaync.service >/dev/null 2>&1 || true
-  qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
-  sync_kwin_effect "$source" glass
-  sync_kwin_effect "$source" blur
-  sync_kwin_effect "$source" contrast
-  sync_kwin_effect "$source" better_blur_dx
-  reconfigure_kwin_effect glass
-  reconfigure_kwin_effect blur
-  reconfigure_kwin_effect contrast
-  reconfigure_kwin_effect better_blur_dx
-  apply_kitty_live "$source"
 }
 
 reconfigure_kwin_effect() {
@@ -365,6 +354,9 @@ case "$cmd" in
       usage >&2
       exit 1
     }
+    case "$name" in
+      *[!A-Za-z0-9._-]*) echo "Invalid profile name: $name (allowed: A-Za-z0-9._-)" >&2; exit 1 ;;
+    esac
     target="$PROFILES/$name"
     mkdir -p "$target"
     copy_tracked_into "$target"
@@ -379,16 +371,30 @@ case "$cmd" in
       usage >&2
       exit 1
     }
+    case "$name" in
+      *[!A-Za-z0-9._-]*) echo "Invalid profile name: $name (allowed: A-Za-z0-9._-)" >&2; exit 1 ;;
+    esac
+    # ВАЖНО: проверяем профиль ДО остановки plasma
+    [ -d "$PROFILES/$name" ] || { echo "Profile not found: $name" >&2; exit 1; }
     ts="$(date +%Y%m%d-%H%M%S)"
     backup="$BACKUPS/pre-apply-$name-$ts"
     copy_tracked_into "$backup"
     capture_kde_effects_state "$backup"
     write_manifest "$backup"
+    # trap: если что-то упадёт после остановки — вернём plasma
+    trap 'start_plasma_shell' ERR
     stop_plasma_shell_for_restore
-    restore_from_profile "$name"
-    apply_live_hooks "$name"
-    echo "Applied profile: $name"
-    echo "Pre-apply backup: $backup"
+    if restore_from_profile "$name"; then
+      apply_live_hooks "$name"
+      trap - ERR
+      echo "Applied profile: $name"
+      echo "Pre-apply backup: $backup"
+    else
+      start_plasma_shell
+      trap - ERR
+      echo "Failed to apply profile: $name — plasma shell started, pre-apply backup: $backup" >&2
+      exit 1
+    fi
     ;;
   diff)
     a="${2:-}"
@@ -397,7 +403,19 @@ case "$cmd" in
       usage >&2
       exit 1
     }
-    diff -ru "$PROFILES/$a" "$PROFILES/$b"
+    [ -d "$PROFILES/$a" ] || { echo "Profile not found: $a" >&2; exit 1; }
+    [ -d "$PROFILES/$b" ] || { echo "Profile not found: $b" >&2; exit 1; }
+    diff -ru "$PROFILES/$a" "$PROFILES/$b"; rc=$?
+    if [ "$rc" -eq 1 ]; then
+      # differences found — this is normal
+      exit 0
+    elif [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    ;;
+  --help|-h)
+    usage
+    exit 0
     ;;
   *)
     usage

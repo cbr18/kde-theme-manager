@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-DIR="$HOME/Изображения/Wallpaper"
+DIR="${WALLPAPER_DIR:-$HOME/Изображения/Wallpaper}"
 STATE="$HOME/.cache/wallpaper_index"
 
 mapfile -t FILES < <(find "$DIR" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | sort)
@@ -9,7 +10,7 @@ COUNT=${#FILES[@]}
 [ "$COUNT" -eq 0 ] && exit 1
 
 INDEX=0
-[ -f "$STATE" ] && INDEX=$(cat "$STATE")
+[ -f "$STATE" ] && INDEX=$(cat "$STATE" 2>/dev/null || echo 0)
 
 INDEX=$(( (INDEX - 1 + COUNT) % COUNT ))
 

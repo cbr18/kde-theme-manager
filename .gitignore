@@ -1,0 +1,17 @@
+# Editor / OS cruft
+*.swp
+*.swo
+*.swn
+*~
+.DS_Store
+Thumbs.db
+
+# Backups created at runtime — never commit
+backups/
+
+# Generated artifacts
+*.bak
+*.tmp
+
+# Shell history
+.bash_history
