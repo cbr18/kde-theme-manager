@@ -6,6 +6,13 @@ import org.kde.kirigami 2.20 as Kirigami
 
 Kirigami.AbstractCard {
     id: card
+
+    // Fallback colors for PySide6 bundled Qt
+    function safeColor(role, fallback) {
+        var c = Kirigami.Theme[role]
+        return c && c.valid ? c : fallback
+    }
+
     Layout.fillWidth: true
 
     // Extract components array for use in Flow
@@ -26,7 +33,7 @@ Kirigami.AbstractCard {
                 source: "preferences-desktop-theme"
                 Layout.preferredWidth: Platform.Units.iconSizes.large
                 Layout.preferredHeight: Platform.Units.iconSizes.large
-                color: Kirigami.Theme.highlightColor
+                color: safeColor("highlightColor", "#2980b9")
             }
 
             ColumnLayout {
@@ -42,7 +49,7 @@ Kirigami.AbstractCard {
                 Label {
                     text: qsTr("%1 components").arg(model.componentCount)
                     font.pointSize: Platform.Units.smallSpacing
-                    color: Kirigami.Theme.textColor
+                    color: safeColor("textColor", "#1f1f1f")
                     opacity: 0.7
                 }
             }
@@ -53,7 +60,7 @@ Kirigami.AbstractCard {
             Kirigami.Icon {
                 source: "dialog-ok-apply"
                 visible: model.isActive !== undefined ? model.isActive : false
-                color: Kirigami.Theme.positiveTextColor
+                color: safeColor("positiveTextColor", "#27ae60")
                 Layout.preferredWidth: Platform.Units.iconSizes.medium
                 Layout.preferredHeight: Platform.Units.iconSizes.medium
             }

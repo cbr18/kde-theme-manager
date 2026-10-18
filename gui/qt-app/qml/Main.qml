@@ -16,6 +16,12 @@ Kirigami.ApplicationWindow {
     minimumWidth: 600
     minimumHeight: 480
 
+    // Fallback colors for PySide6 bundled Qt
+    function safeColor(role, fallback) {
+        var c = Kirigami.Theme[role]
+        return c && c.valid ? c : fallback
+    }
+
     // Подключение ThemeController к окну
     Component.onCompleted: {
         themeController.set_window(root)
@@ -26,18 +32,25 @@ Kirigami.ApplicationWindow {
     }
 
     // Поддержка glass темы: прозрачный фон
-    color: themeController.isGlass ? "transparent" : Kirigami.Theme.backgroundColor
+    color: themeController.isGlass ? "transparent" : safeColor("backgroundColor", "#f0f0f0")
 
-     // Реакция на смену темы
-     Connections {
-         target: themeController
-         function onIsGlassChanged() {
-             root.color = themeController.isGlass ? "transparent" : Kirigami.Theme.backgroundColor
-         }
-     }
+    // Реакция на смену темы
+    Connections {
+        target: themeController
+        function onIsGlassChanged() {
+            root.color = themeController.isGlass ? "transparent" : safeColor("backgroundColor", "#f0f0f0")
+        }
+    }
 
     // Глобальные настройки
-    property bool isDarkTheme: Kirigami.Theme.highlightColor.r < 0.5
+    property bool isDarkTheme: {
+        var hc = Kirigami.Theme.highlightColor
+        return hc && hc.valid ? hc.r < 0.5 : false
+    }
+
+    // Glass theme: semi-transparent widgets
+    readonly property real glassOpacity: themeController.isGlass ? 0.75 : 1.0
+    readonly property bool glassMode: themeController.isGlass
 
     // ──────────────────────────────────────────────────────────────
     // Главная страница (профили + обои)
@@ -52,6 +65,7 @@ Kirigami.ApplicationWindow {
             // ─── Header: Active Profile ───
             Kirigami.Card {
                 Layout.fillWidth: true
+                opacity: root.glassOpacity
                 Layout.leftMargin: Platform.Units.largeSpacing
                 Layout.rightMargin: Platform.Units.largeSpacing
                 Layout.topMargin: Platform.Units.largeSpacing
@@ -96,6 +110,7 @@ Kirigami.ApplicationWindow {
             // ─── Profiles Grid ───
             Kirigami.Card {
                 Layout.fillWidth: true
+                opacity: root.glassOpacity
                 Layout.leftMargin: Platform.Units.largeSpacing
                 Layout.rightMargin: Platform.Units.largeSpacing
                 Layout.topMargin: Platform.Units.mediumSpacing
@@ -149,6 +164,7 @@ Kirigami.ApplicationWindow {
             // ─── Wallpaper Section ───
             Kirigami.Card {
                 Layout.fillWidth: true
+                opacity: root.glassOpacity
                 Layout.leftMargin: Platform.Units.largeSpacing
                 Layout.rightMargin: Platform.Units.largeSpacing
                 Layout.topMargin: Platform.Units.mediumSpacing
@@ -187,7 +203,7 @@ Kirigami.ApplicationWindow {
                         Rectangle {
                             anchors.fill: parent
                             color: "transparent"
-                            border.color: Kirigami.Theme.highlightColor
+                            border.color: safeColor("highlightColor", "#2980b9")
                             border.width: 2
                             radius: 8
                         }
@@ -248,7 +264,7 @@ Kirigami.ApplicationWindow {
                                 "• Terminal: <tt>wallpaper-picker</tt>, <tt>wallpaper-next</tt>, <tt>wallpaper-prev</tt>"
                             )
                             font.pointSize: Platform.Units.smallSpacing
-                            color: Kirigami.Theme.textColor
+                            color: safeColor("textColor", "#1f1f1f")
                             opacity: 0.7
                         }
                     }
@@ -277,6 +293,7 @@ Kirigami.ApplicationWindow {
 
         ColumnLayout {
             Layout.fillWidth: true
+                opacity: root.glassOpacity
             Layout.minimumWidth: 300
             TextField {
                 id: nameField

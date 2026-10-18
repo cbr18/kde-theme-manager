@@ -6,6 +6,13 @@ import org.kde.kirigami 2.20 as Kirigami
 
 Kirigami.AbstractCard {
     id: card
+
+    // Fallback colors for PySide6 bundled Qt
+    function safeColor(role, fallback) {
+        var c = Kirigami.Theme[role]
+        return c && c.valid ? c : fallback
+    }
+
     Layout.preferredWidth: 160
     Layout.minimumWidth: 140
     Layout.maximumWidth: 200
@@ -28,7 +35,7 @@ Kirigami.AbstractCard {
                 source: "preferences-desktop-theme"
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
-                color: isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                color: isActive ? safeColor("highlightColor", "#2980b9") : safeColor("textColor", "#1f1f1f")
                 opacity: isActive ? 1.0 : 0.5
             }
 
@@ -50,7 +57,7 @@ Kirigami.AbstractCard {
             Layout.alignment: Qt.AlignHCenter
             text: qsTr("%1 components").arg(componentCount)
             font.pointSize: Platform.Units.smallSpacing
-            color: Kirigami.Theme.textColor
+            color: safeColor("textColor", "#1f1f1f")
             opacity: 0.6
         }
     }
@@ -78,12 +85,12 @@ Kirigami.AbstractCard {
     Binding {
         target: bgRect
         property: "border.color"
-        value: isActive ? Kirigami.Theme.highlightColor : (enabled ? Kirigami.Theme.viewColor : Kirigami.Theme.disabledTextColor)
+        value: isActive ? safeColor("highlightColor", "#2980b9") : (enabled ? safeColor("viewColor", "#e0e0e0") : safeColor("disabledTextColor", "#888888"))
     }
     Binding {
         target: bgRect
         property: "color"
-        value: isActive ? Kirigami.Theme.highlightColor : "transparent"
+        value: isActive ? safeColor("highlightColor", "#2980b9") : "transparent"
     }
     Binding {
         target: bgRect
@@ -100,7 +107,7 @@ Kirigami.AbstractCard {
         anchors.fill: parent
         hoverEnabled: true
         enabled: enabled
-        onEntered: if (enabled) bgRect.border.color = isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.hoverColor
-        onExited: if (enabled) bgRect.border.color = isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.viewColor
+        onEntered: if (enabled) bgRect.border.color = isActive ? safeColor("highlightColor", "#2980b9") : safeColor("hoverColor", "#cccccc")
+        onExited: if (enabled) bgRect.border.color = isActive ? safeColor("highlightColor", "#2980b9") : safeColor("viewColor", "#e0e0e0")
     }
 }

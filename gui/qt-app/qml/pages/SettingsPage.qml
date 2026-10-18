@@ -6,6 +6,12 @@ import org.kde.kirigami 2.20 as Kirigami
 
 Kirigami.Page {
     id: page
+
+    // Fallback colors for PySide6 bundled Qt
+    function safeColor(role, fallback) {
+        var c = Kirigami.Theme[role]
+        return c && c.valid ? c : fallback
+    }
     title: qsTr("Settings")
     scrollable: true
 
@@ -72,7 +78,7 @@ Kirigami.Page {
                     Label {
                         text: qsTr("Select components to include when applying/saving profiles:")
                         font.pointSize: Platform.Units.smallSpacing
-                        color: Kirigami.Theme.textColor
+                        color: safeColor("textColor", "#1f1f1f")
                         opacity: 0.7
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true

@@ -10,7 +10,7 @@ from pathlib import Path
 # Добавляем src в путь для импортов
 sys.path.insert(0, str(Path(__file__).parent))
 
-from PySide6.QtGui import QGuiApplication, QIcon
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtCore import QUrl, QCoreApplication, Qt

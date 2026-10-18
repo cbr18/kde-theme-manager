@@ -6,6 +6,12 @@ import org.kde.kirigami 2.20 as Kirigami
 
 Kirigami.Card {
     id: group
+
+    // Fallback colors for PySide6 bundled Qt
+    function safeColor(role, fallback) {
+        var c = Kirigami.Theme[role]
+        return c && c.valid ? c : fallback
+    }
     Layout.fillWidth: true
     property string category: ""
     property var selectedComponents: []
@@ -34,7 +40,7 @@ Kirigami.Card {
                 source: categoryIcon(category)
                 Layout.preferredWidth: Platform.Units.iconSizes.medium
                 Layout.preferredHeight: Platform.Units.iconSizes.medium
-                color: Kirigami.Theme.highlightColor
+                color: safeColor("highlightColor", "#2980b9")
             }
 
             Kirigami.Heading {

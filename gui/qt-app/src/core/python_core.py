@@ -8,6 +8,7 @@ Python Core Implementation — обёртки над существующими 
 import json
 import subprocess
 import time
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -26,7 +27,13 @@ class PythonProfileCore(ProfileCore):
     """Обёртка над theme-profile bash скриптом."""
 
     def __init__(self, theme_profile_bin: str = "theme-profile"):
-        self.bin = theme_profile_bin
+        # Resolve binary path: check PATH, then fallback to ~/.local/bin/
+        resolved = shutil.which(theme_profile_bin)
+        if resolved:
+            self.bin = resolved
+        else:
+            fallback = Path.home() / ".local/bin" / theme_profile_bin
+            self.bin = str(fallback) if fallback.exists() else theme_profile_bin
         self._profiles_dir = Path.home() / ".config/theme-profile/profiles"
         self._active_file = Path.home() / ".config/theme-profile/active-profile"
 

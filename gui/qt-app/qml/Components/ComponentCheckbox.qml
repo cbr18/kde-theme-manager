@@ -6,6 +6,13 @@ import org.kde.kirigami 2.20 as Kirigami
 
 Kirigami.AbstractCard {
     id: checkbox
+
+    // Fallback colors for PySide6 bundled Qt
+    function safeColor(role, fallback) {
+        var c = Kirigami.Theme[role]
+        return c && c.valid ? c : fallback
+    }
+
     Layout.fillWidth: true
     property string componentId: ""
     property string componentName: ""
@@ -20,9 +27,9 @@ Kirigami.AbstractCard {
     // Visual state
     property color statusColor: {
         switch (componentStatus) {
-            case "available": return Kirigami.Theme.positiveTextColor
-            case "partial": return Kirigami.Theme.warningTextColor
-            case "not_installed": return Kirigami.Theme.negativeTextColor
+            case "available": return safeColor("positiveTextColor", "#27ae60")
+            case "partial": return safeColor("warningTextColor", "#f39c12")
+            case "not_installed": return safeColor("negativeTextColor", "#e74c3c")
         }
     }
 
@@ -44,7 +51,7 @@ Kirigami.AbstractCard {
             source: componentIcon
             Layout.preferredWidth: Platform.Units.iconSizes.medium
             Layout.preferredHeight: Platform.Units.iconSizes.medium
-            color: isAvailable ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
+            color: isAvailable ? safeColor("textColor", "#1f1f1f") : safeColor("disabledTextColor", "#888888")
             opacity: isAvailable ? 1.0 : 0.5
         }
 
@@ -57,7 +64,7 @@ Kirigami.AbstractCard {
                 Label {
                     text: componentName
                     font.bold: true
-                    color: isAvailable ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
+                    color: isAvailable ? safeColor("textColor", "#1f1f1f") : safeColor("disabledTextColor", "#888888")
                 }
 
                 // Status badge
@@ -72,7 +79,7 @@ Kirigami.AbstractCard {
                 Label {
                     text: i18n("Live")
                     font.pointSize: Platform.Units.smallSpacing
-                    color: Kirigami.Theme.highlightColor
+                    color: safeColor("highlightColor", "#2980b9")
                     visible: componentSupportsLiveReload && isAvailable
                 }
             }
@@ -80,7 +87,7 @@ Kirigami.AbstractCard {
             Label {
                 text: componentDescription
                 font.pointSize: Platform.Units.smallSpacing
-                color: Kirigami.Theme.textColor
+                color: safeColor("textColor", "#1f1f1f")
                 opacity: 0.6
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
@@ -93,7 +100,7 @@ Kirigami.AbstractCard {
     Rectangle {
         id: disabledOverlay
         anchors.fill: parent
-        color: Kirigami.Theme.viewColor
+        color: safeColor("viewColor", "#e0e0e0")
         opacity: isAvailable ? 0 : 0.15
         visible: !isAvailable
     }

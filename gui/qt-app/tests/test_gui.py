@@ -595,3 +595,58 @@ def test_qml_connections_function_syntax() -> None:
     assert "function onIsGlassChanged" in main_qml, (
         "Connections should use function syntax for Qt 6.12 compatibility"
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 21. QML safeColor helper (fallback for PySide6 bundled Qt Kirigami.Theme)
+# ─────────────────────────────────────────────────────────────────────────────
+def test_qml_has_safecolor_helper() -> None:
+    """All QML files using Kirigami.Theme color roles must use safeColor fallback."""
+    qml_dir = PROJECT_ROOT / "qml"
+    for qml_file in qml_dir.rglob("*.qml"):
+        content = qml_file.read_text()
+        # If the file uses Kirigami.Theme color roles, it must also define safeColor
+        if "Kirigami.Theme." in content:
+            assert "function safeColor" in content, (
+                f"{qml_file.relative_to(qml_dir)} uses Kirigami.Theme colors "
+                "but doesn't define safeColor fallback"
+            )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 22. Main.qml glassOpacity property (semi-transparent widgets in glass mode)
+# ─────────────────────────────────────────────────────────────────────────────
+def test_main_has_glass_opacity_property() -> None:
+    """Main.qml must define glassOpacity for semi-transparent widgets in glass mode."""
+    main_qml = (PROJECT_ROOT / "qml" / "Main.qml").read_text()
+    assert "glassOpacity" in main_qml, (
+        "Main.qml must define glassOpacity property for semi-transparent widgets"
+    )
+    assert "opacity: root.glassOpacity" in main_qml or \
+           'opacity: root.glassOpacity' in main_qml, (
+        "At least one Card must bind to root.glassOpacity for transparency"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 23. Python core uses shutil.which for binary path resolution
+# ─────────────────────────────────────────────────────────────────────────────
+def test_python_core_binary_resolution() -> None:
+    """python_core.py must use shutil.which with ~/.local/bin fallback for theme-profile."""
+    core_path = SRC_DIR / "core" / "python_core.py"
+    content = core_path.read_text()
+    assert "import shutil" in content, (
+        "python_core.py must import shutil for PATH resolution"
+    )
+    assert shutil_path_in_init(content), (
+        "PythonProfileCore.__init__ must use shutil.which with ~/.local/bin fallback"
+    )
+
+
+def shutil_path_in_init(content: str) -> bool:
+    """Check that __init__ has shutil.which + ~/.local/bin fallback."""
+    # Check for shutil.which call
+    has_which = "shutil.which" in content
+    # Check for local/bin fallback
+    has_fallback = ".local/bin" in content
+    return has_which and has_fallback
