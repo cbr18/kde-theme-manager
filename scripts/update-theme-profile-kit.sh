@@ -11,7 +11,7 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   cat <<'EOF'
 Usage: update-theme-profile-kit.sh [OPTIONS]
 
-Update theme-profile-kit from git and reinstall scripts.
+Update theme-profile-kit from git, then reinstall the scripts and the GUI.
 
 Options:
   -h, --help    Show this help message and exit.

@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+# install-kde-theme-manager.sh — deploy the Qt/QML app, its launcher and its
+# desktop entry.
+#
+# The app is a plain Python/QML tree, so "installing" means copying it next to
+# user data, writing a launcher into ~/.local/bin and registering a .desktop
+# file — nothing is compiled and no files inside the repository are touched.
+#
+# Paths (all overridable through the usual XDG variables, which is what the
+# tests use):
+#   app      ${XDG_DATA_HOME:-~/.local/share}/kde-theme-manager
+#   launcher ${XDG_BIN_HOME:-~/.local/bin}/kde-theme-manager
+#   entry    ${XDG_DATA_HOME:-~/.local/share}/applications/kde-theme-manager.desktop
+#   icon     ${XDG_DATA_HOME:-~/.local/share}/icons/hicolor/scalable/apps/kde-theme-manager.svg
+#   backups  ${XDG_CONFIG_HOME:-~/.config}/theme-profile/backups/
+
+set -euo pipefail
+
+say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m==> %s\033[0m\n' "$*" >&2; }
+
+KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_SRC="$KIT_DIR/gui/qt-app"
+
+BINDIR="${XDG_BIN_HOME:-$HOME/.local/bin}"
+DATADIR="${XDG_DATA_HOME:-$HOME/.local/share}"
+CONFIGDIR="${XDG_CONFIG_HOME:-$HOME/.config}"
+APPDIR="$DATADIR/kde-theme-manager"
+# Launcher + desktop entry written by hand before this script existed.
+LEGACY_APPDIR="$DATADIR/theme-profile-manager"
+APPSDIR="$DATADIR/applications"
+ICONDIR="$DATADIR/icons/hicolor/scalable/apps"
+MARKER=".installed-by-theme-profile-kit"
+BACKUP_ROOT="$CONFIGDIR/theme-profile/backups"
+BACKUP_DIR="$BACKUP_ROOT/deploy-kde-theme-manager-$(date +%Y%m%d-%H%M%S)"
+
+VENV_MODE="auto" # auto | yes | no
+
+usage() {
+  cat <<'EOF'
+Usage: install-kde-theme-manager.sh [OPTIONS]
+
+Install the KDE Theme Manager GUI (Qt/QML app), its launcher and desktop entry.
+
+Options:
+  --with-venv   Always build .venv inside the installed app directory
+  --no-venv     Never build a venv (requires the system PySide6)
+  -h, --help    Show this help message and exit.
+
+With neither --with-venv nor --no-venv a venv is created only when the system
+Python cannot `import PySide6` (e.g. pyside6 is not installed from the distro).
+
+Installed files:
+  ~/.local/share/kde-theme-manager/              application (copy)
+  ~/.local/bin/kde-theme-manager                 launcher
+  ~/.local/share/applications/kde-theme-manager.desktop
+  ~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg
+  ~/.config/theme-profile/backups/deploy-kde-theme-manager-*/   backups
+
+Profiles and settings in ~/.config/theme-profile/ are never modified.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --with-venv) VENV_MODE="yes" ;;
+    --no-venv) VENV_MODE="no" ;;
+    *)
+      warn "Unknown option: $1"
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+for required in "$APP_SRC/src/__main__.py" "$APP_SRC/theme-profile-manager.sh" \
+  "$APP_SRC/resources/kde-theme-manager.desktop" \
+  "$APP_SRC/resources/icons/kde-theme-manager.svg"; do
+  if [ ! -f "$required" ]; then
+    warn "Missing source: $required"
+    exit 1
+  fi
+done
+
+# ── Back up anything we are about to replace ────────────────────────────────
+backup() { # path label
+  [ -e "$1" ] || return 0
+  mkdir -p "$(dirname "$BACKUP_DIR/$2")"
+  cp -a "$1" "$BACKUP_DIR/$2"
+  say "Backup: $1 → $BACKUP_DIR/$2"
+}
+
+say "Installing KDE Theme Manager"
+mkdir -p "$BINDIR" "$APPDIR" "$APPSDIR" "$ICONDIR"
+
+backup "$APPDIR" "app"
+backup "$LEGACY_APPDIR" "legacy-theme-profile-manager"
+backup "$BINDIR/kde-theme-manager" "bin/kde-theme-manager"
+backup "$APPSDIR/kde-theme-manager.desktop" "applications/kde-theme-manager.desktop"
+
+# ── Application files ───────────────────────────────────────────────────────
+# rsync when available (fast re-installs, --delete keeps the copy honest),
+# plain tar otherwise. Never copy the dev venv, caches or the Rust build tree.
+say "Copying application → $APPDIR"
+if command -v rsync >/dev/null 2>&1; then
+  rsync -a --delete \
+    --exclude '.venv/' --exclude '__pycache__/' --exclude '*.egg-info/' \
+    --exclude 'target/' --exclude 'tests/' \
+    "$APP_SRC/" "$APPDIR/"
+else
+  find "$APPDIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  tar -C "$APP_SRC" \
+    --exclude='.venv' --exclude='__pycache__' --exclude='*.egg-info' \
+    --exclude='target' --exclude='tests' -cf - . |
+    tar -C "$APPDIR" -xf -
+fi
+printf '%s\n' "installed by $KIT_DIR/scripts/install-kde-theme-manager.sh" > "$APPDIR/$MARKER"
+
+# ── Python environment ──────────────────────────────────────────────────────
+py_has_pyside() {
+  command -v python3 >/dev/null 2>&1 &&
+    python3 -c 'import PySide6' >/dev/null 2>&1
+}
+
+if [ "$VENV_MODE" = "no" ]; then
+  say "Venv skipped (--no-venv)"
+  if ! py_has_pyside; then
+    warn "Warning: the system Python cannot import PySide6 either — run with --with-venv."
+  fi
+elif [ "$VENV_MODE" = "auto" ] && py_has_pyside; then
+  say "System PySide6 found ($(python3 -c 'import PySide6; print(PySide6.__version__)' 2>/dev/null)) — no venv needed"
+else
+  say "Creating virtual environment in $APPDIR/.venv"
+  if command -v uv >/dev/null 2>&1; then
+    uv venv "$APPDIR/.venv"
+    uv pip install --python "$APPDIR/.venv/bin/python" "PySide6>=6.7"
+  else
+    python3 -m venv "$APPDIR/.venv"
+    "$APPDIR/.venv/bin/python" -m pip install --upgrade pip
+    "$APPDIR/.venv/bin/python" -m pip install "PySide6>=6.7"
+  fi
+fi
+
+# ── Launcher ────────────────────────────────────────────────────────────────
+say "Writing launcher → $BINDIR/kde-theme-manager"
+cat > "$BINDIR/kde-theme-manager" <<'LAUNCHER'
+#!/usr/bin/env bash
+# kde-theme-manager — launcher written by theme-profile-kit.
+# The real entry point (QML import paths, venv preference) lives with the app.
+set -euo pipefail
+
+APP_DIR="${KDE_THEME_MANAGER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/kde-theme-manager}"
+APP_SH="$APP_DIR/theme-profile-manager.sh"
+
+if [ ! -x "$APP_SH" ]; then
+  printf 'kde-theme-manager: not installed (%s not found)\n' "$APP_SH" >&2
+  printf 'Install it with: %s/scripts/install-kde-theme-manager.sh\n' \
+    "${THEME_PROFILE_KIT:-@KIT_DIR@}" >&2
+  exit 127
+fi
+
+exec "$APP_SH" "$@"
+LAUNCHER
+sed -i "s|@KIT_DIR@|$KIT_DIR|g" "$BINDIR/kde-theme-manager"
+chmod 755 "$BINDIR/kde-theme-manager" "$APPDIR/theme-profile-manager.sh"
+
+# ── Desktop entry + icon ────────────────────────────────────────────────────
+say "Installing desktop entry and icon"
+install -m 644 "$APP_SRC/resources/kde-theme-manager.desktop" \
+  "$APPSDIR/kde-theme-manager.desktop"
+install -m 644 "$APP_SRC/resources/icons/kde-theme-manager.svg" \
+  "$ICONDIR/kde-theme-manager.svg"
+
+# ── Obsolete hand-made copy ─────────────────────────────────────────────────
+if [ -e "$LEGACY_APPDIR" ]; then
+  say "Removing obsolete copy $LEGACY_APPDIR (backed up above)"
+  rm -rf "$LEGACY_APPDIR"
+fi
+
+# ── Caches ──────────────────────────────────────────────────────────────────
+command -v update-desktop-database >/dev/null 2>&1 &&
+  update-desktop-database "$APPSDIR" 2>/dev/null || true
+command -v gtk-update-icon-cache >/dev/null 2>&1 &&
+  gtk-update-icon-cache -f -t "$DATADIR/icons/hicolor" >/dev/null 2>&1 || true
+# KDE caches its service/menu database; without this the entry can take a
+# while (or a re-login) to show up in the application menu.
+for ksycoca in kbuildsycoca6 kbuildsycoca5; do
+  command -v "$ksycoca" >/dev/null 2>&1 &&
+    "$ksycoca" >/dev/null 2>&1 || true
+done
+
+say "Done."
+say "Запуск: kde-theme-manager  (или ярлык «KDE Theme Manager» в меню)"
+say "Данные профилей остались в $CONFIGDIR/theme-profile/"
+if [ -d "$BACKUP_DIR" ]; then
+  say "Бэкап заменённых файлов: $BACKUP_DIR"
+fi

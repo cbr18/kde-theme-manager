@@ -14,16 +14,36 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   cat <<'EOF'
 Usage: install-theme-profile-kit.sh [OPTIONS]
 
-Install theme-profile-kit scripts to ~/.local/bin with backup of existing files.
+Install theme-profile-kit: the command line scripts and (by default) the
+KDE Theme Manager GUI with its launcher and desktop entry.
 
 Options:
+  --no-gui      Install only the scripts, skip the Qt/QML application
+  --with-venv   Always build a venv inside the installed app (passed through)
+  --no-venv     Never build a venv — use the system PySide6 (passed through)
   -h, --help    Show this help message and exit.
 
-Scripts installed:
+Scripts installed to ~/.local/bin:
   theme-profile, theme-menu, wallpaper-picker, wallpaper-next, wallpaper-prev
+
+The GUI is installed by scripts/install-kde-theme-manager.sh (see its --help
+for paths, --with-venv/--no-venv and what gets installed).
 EOF
   exit 0
 fi
+
+WITH_GUI=1
+GUI_ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --no-gui) WITH_GUI=0 ;;
+    --with-venv | --no-venv) GUI_ARGS+=("$arg") ;;
+    *)
+      say "Unknown option: $arg" >&2
+      exit 2
+      ;;
+  esac
+done
 
 SCRIPTS=(
   "theme-profile"
@@ -61,3 +81,14 @@ done
 
 say "Installed theme-profile-kit scripts to $DEST_DIR"
 say "Backup: $BACKUP_DIR"
+
+# ── GUI (Qt/QML app + launcher + desktop entry) ─────────────────────────────
+if [ "$WITH_GUI" -eq 1 ]; then
+  if [ -x "$KIT_DIR/scripts/install-kde-theme-manager.sh" ]; then
+    "$KIT_DIR/scripts/install-kde-theme-manager.sh" ${GUI_ARGS[@]+"${GUI_ARGS[@]}"}
+  else
+    say "GUI installer not found — skipping the app (scripts only)."
+  fi
+else
+  say "Skipped the GUI (--no-gui)."
+fi

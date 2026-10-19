@@ -8,9 +8,11 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   cat <<'EOF'
 Usage: uninstall-theme-profile-kit.sh [OPTIONS]
 
-Uninstall theme-profile-kit: remove scripts from ~/.local/bin and theme-profile data directory.
+Uninstall theme-profile-kit: remove scripts and the GUI from the home
+directory, plus the theme-profile data directory.
 
 Options:
+  --no-gui       Keep the GUI (remove scripts and data only)
   -f, --force    Skip confirmation prompt.
   -h, --help     Show this help message and exit.
 EOF
@@ -19,12 +21,25 @@ fi
 
 # --force / -f: auto-confirm
 FORCE=0
-if [ "${1:-}" = "--force" ] || [ "${1:-}" = "-f" ]; then
-  FORCE=1
-fi
+WITH_GUI=1
+for arg in "$@"; do
+  case "$arg" in
+    -f | --force) FORCE=1 ;;
+    --no-gui) WITH_GUI=0 ;;
+    *)
+      printf 'Unknown option: %s\n' "$arg" >&2
+      exit 2
+      ;;
+  esac
+done
 
 BINDIR="${XDG_BIN_HOME:-$HOME/.local/bin}"
 THEMEDIR="$HOME/.config/theme-profile"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ "$WITH_GUI" -eq 1 ] && [ -x "$SCRIPT_DIR/uninstall-kde-theme-manager.sh" ]; then
+  "$SCRIPT_DIR/uninstall-kde-theme-manager.sh" --force
+fi
 
 say "Удаление исполняемых файлов"
 rm -f "$BINDIR/theme-profile"

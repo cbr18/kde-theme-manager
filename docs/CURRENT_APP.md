@@ -29,7 +29,22 @@
 ```
 
 Создаёт бэкап предыдущих версий в `~/.config/theme-profile/backups/`.
-Деплоит скрипты в `~/.local/bin/` (должно быть в PATH).
+Деплоит скрипты в `~/.local/bin/` (должно быть в PATH) и GUI:
+
+| Что | Куда |
+|-----|------|
+| `theme-profile`, `theme-menu`, `wallpaper-*` | `~/.local/bin/` |
+| KDE Theme Manager (копия приложения) | `~/.local/share/kde-theme-manager/` |
+| обёртка `kde-theme-manager` | `~/.local/bin/` |
+| ярлык | `~/.local/share/applications/kde-theme-manager.desktop` |
+| иконка | `~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg` |
+
+Только скрипты: `install-theme-profile-kit.sh --no-gui`.
+Отдельно GUI: `scripts/install-kde-theme-manager.sh` (venv создаётся лишь
+если в системе нет PySide6) и `scripts/uninstall-kde-theme-manager.sh`.
+
+Данные (профили, бэкапы, настройки) живут отдельно, в
+`~/.config/theme-profile/`, и установкой не затрагиваются.
 
 ---
 

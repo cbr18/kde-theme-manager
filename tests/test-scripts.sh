@@ -29,7 +29,9 @@ for script in \
     "$SCRIPT_DIR/files/bin/wallpaper-prev" \
     "$SCRIPT_DIR/scripts/install-theme-profile-kit.sh" \
     "$SCRIPT_DIR/scripts/uninstall-theme-profile-kit.sh" \
-    "$SCRIPT_DIR/scripts/update-theme-profile-kit.sh"; do
+    "$SCRIPT_DIR/scripts/update-theme-profile-kit.sh" \
+    "$SCRIPT_DIR/scripts/install-kde-theme-manager.sh" \
+    "$SCRIPT_DIR/scripts/uninstall-kde-theme-manager.sh"; do
 
   if run_silent bash -n "$script"; then
     ok "bash -n: $script"
@@ -50,7 +52,9 @@ if command -v shellcheck >/dev/null 2>&1; then
       "$SCRIPT_DIR/files/bin/wallpaper-prev" \
       "$SCRIPT_DIR/scripts/install-theme-profile-kit.sh" \
       "$SCRIPT_DIR/scripts/uninstall-theme-profile-kit.sh" \
-      "$SCRIPT_DIR/scripts/update-theme-profile-kit.sh"; do
+      "$SCRIPT_DIR/scripts/update-theme-profile-kit.sh" \
+      "$SCRIPT_DIR/scripts/install-kde-theme-manager.sh" \
+      "$SCRIPT_DIR/scripts/uninstall-kde-theme-manager.sh"; do
 
     if shellcheck "$script" 2>/dev/null; then
       ok "shellcheck: $script"
@@ -75,6 +79,21 @@ if "$SCRIPT_DIR/files/bin/theme-profile" -h >/dev/null 2>&1; then
   ok "theme-profile -h exits 0"
 else
   fail "theme-profile -h should exit 0"
+fi
+
+for installer in install-theme-profile-kit.sh uninstall-theme-profile-kit.sh \
+  install-kde-theme-manager.sh uninstall-kde-theme-manager.sh; do
+  if "$SCRIPT_DIR/scripts/$installer" --help >/dev/null 2>&1; then
+    ok "$installer --help exits 0"
+  else
+    fail "$installer --help should exit 0"
+  fi
+done
+
+if "$SCRIPT_DIR/scripts/install-theme-profile-kit.sh" --bogus >/dev/null 2>&1; then
+  fail "install-theme-profile-kit.sh should reject unknown options"
+else
+  ok "install-theme-profile-kit.sh rejects unknown options"
 fi
 
 # --- 4. theme-profile: invalid profile names rejected -------------------------
@@ -368,6 +387,146 @@ if [ -z "$(pick 'some/typed/path.png' 2>/dev/null)" ]; then
   ok "wallpaper-picker: a typed custom entry is not treated as a position"
 else
   fail "wallpaper-picker: typed custom entry was applied"
+fi
+
+# --- 11. GUI install/uninstall round trip in a throwaway HOME -----------------
+echo "=== Section 11: kde-theme-manager install / uninstall ==="
+
+FAKE_HOME="$TMP_ROOT/fake-home"
+mkdir -p "$FAKE_HOME"
+
+gui_install() {
+  env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
+    PATH="/usr/bin:/bin:/home/cbr/.local/bin" \
+    bash "$SCRIPT_DIR/scripts/install-kde-theme-manager.sh" --no-venv
+}
+
+if gui_install >/dev/null 2>&1; then
+  ok "install-kde-theme-manager.sh runs"
+else
+  fail "install-kde-theme-manager.sh failed"
+fi
+
+check_installed() { # path description
+  if [ -e "$1" ]; then ok "$2"; else fail "$2 (missing: $1)"; fi
+}
+
+check_installed "$FAKE_HOME/.local/share/kde-theme-manager/src/__main__.py" \
+  "app copy installed"
+check_installed "$FAKE_HOME/.local/share/kde-theme-manager/qml/Main.qml" \
+  "app QML shipped with the copy"
+check_installed "$FAKE_HOME/.local/share/kde-theme-manager/.installed-by-theme-profile-kit" \
+  "app copy carries the install marker"
+check_installed "$FAKE_HOME/.local/bin/kde-theme-manager" "launcher installed"
+check_installed "$FAKE_HOME/.local/share/applications/kde-theme-manager.desktop" \
+  "desktop entry installed"
+check_installed "$FAKE_HOME/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg" \
+  "app icon installed"
+
+if [ -x "$FAKE_HOME/.local/bin/kde-theme-manager" ]; then
+  ok "launcher is executable"
+else
+  fail "launcher must be executable"
+fi
+
+# The dev venv, caches and the Rust build tree must not be copied.
+if [ -e "$FAKE_HOME/.local/share/kde-theme-manager/.venv" ] ||
+  [ -e "$FAKE_HOME/.local/share/kde-theme-manager/src/core/rust_core/target" ]; then
+  fail "installer copied .venv or the Rust build tree"
+else
+  ok "installer skips .venv / rust_core target"
+fi
+
+# Killing the app directory must break the launcher with a clear message.
+mv "$FAKE_HOME/.local/share/kde-theme-manager" "$FAKE_HOME/moved-app"
+out="$(env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
+  PATH="/usr/bin:/bin" bash "$FAKE_HOME/.local/bin/kde-theme-manager" 2>&1 || true)"
+mv "$FAKE_HOME/moved-app" "$FAKE_HOME/.local/share/kde-theme-manager"
+case "$out" in
+  *"not installed"*) ok "launcher reports a missing app instead of crashing" ;;
+  *) fail "launcher message unexpected: $out" ;;
+esac
+
+# A re-install must keep working (and back up the previous tree).
+if gui_install >/dev/null 2>&1; then
+  ok "re-install succeeds"
+else
+  fail "re-install failed"
+fi
+if compgen -G "$FAKE_HOME/.config/theme-profile/backups/deploy-kde-theme-manager-*" >/dev/null; then
+  ok "re-install backs up the previous app directory"
+else
+  fail "re-install produced no backup"
+fi
+
+env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
+  PATH="/usr/bin:/bin" \
+  bash "$SCRIPT_DIR/scripts/uninstall-kde-theme-manager.sh" --force >/dev/null 2>&1
+
+check_gone() { # path description
+  if [ -e "$1" ]; then fail "still present: $1"; else ok "$2"; fi
+}
+
+check_gone "$FAKE_HOME/.local/share/kde-theme-manager" "app copy removed"
+check_gone "$FAKE_HOME/.local/bin/kde-theme-manager" "launcher removed"
+check_gone "$FAKE_HOME/.local/share/applications/kde-theme-manager.desktop" \
+  "desktop entry removed"
+check_gone "$FAKE_HOME/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg" \
+  "app icon removed"
+
+# An unrelated directory must survive removal.
+mkdir -p "$FAKE_HOME/.local/share/kde-theme-manager-not-ours"
+printf 'keep me\n' > "$FAKE_HOME/.local/share/kde-theme-manager-not-ours/data"
+env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
+  PATH="/usr/bin:/bin" \
+  bash "$SCRIPT_DIR/scripts/uninstall-kde-theme-manager.sh" --force >/dev/null 2>&1
+if [ -f "$FAKE_HOME/.local/share/kde-theme-manager-not-ours/data" ]; then
+  ok "uninstall leaves unrelated data alone"
+else
+  fail "uninstall removed an unrelated directory"
+fi
+
+# The kit installer must bring up both the scripts and the GUI (and --no-gui
+# must install the scripts only).
+if env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
+  PATH="/usr/bin:/bin" \
+  bash "$SCRIPT_DIR/scripts/install-theme-profile-kit.sh" --no-venv >/dev/null 2>&1; then
+  ok "install-theme-profile-kit.sh runs"
+else
+  fail "install-theme-profile-kit.sh failed"
+fi
+
+for f in theme-profile theme-menu wallpaper-picker wallpaper-next wallpaper-prev; do
+  if [ -x "$FAKE_HOME/.local/bin/$f" ]; then
+    ok "kit installer deployed $f"
+  else
+    fail "kit installer did not deploy $f"
+  fi
+done
+
+if [ -x "$FAKE_HOME/.local/bin/kde-theme-manager" ]; then
+  ok "kit installer also installed the GUI launcher"
+else
+  fail "kit installer did not install the GUI launcher"
+fi
+
+rm -rf "$FAKE_HOME/.local/share/kde-theme-manager" "$FAKE_HOME/.local/bin/kde-theme-manager"
+env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
+  PATH="/usr/bin:/bin" \
+  bash "$SCRIPT_DIR/scripts/install-theme-profile-kit.sh" --no-gui >/dev/null 2>&1
+if [ ! -e "$FAKE_HOME/.local/bin/kde-theme-manager" ]; then
+  ok "--no-gui installs the scripts without the app"
+else
+  fail "--no-gui still installed the app"
+fi
+
+if env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
+  PATH="/usr/bin:/bin" \
+  bash "$SCRIPT_DIR/scripts/uninstall-theme-profile-kit.sh" --force --no-gui >/dev/null 2>&1 &&
+  [ ! -e "$FAKE_HOME/.local/bin/theme-profile" ]; then
+  ok "uninstall-theme-profile-kit.sh --force --no-gui removes the scripts"
+else
+  fail "kit uninstaller (--no-gui) did not remove the scripts"
 fi
 
 # --- Summary ------------------------------------------------------------------

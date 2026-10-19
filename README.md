@@ -37,17 +37,21 @@
 | `wallpaper-picker` | Choose wallpaper via wofi with thumbnail preview |
 | `wallpaper-next` / `wallpaper-prev` | Cycle wallpapers |
 
-### GUI Application (optional)
+### GUI Application (optional, installed by default)
 
 | Component | Purpose |
 |-----------|---------|
 | `gui/qt-app/` | **KDE Theme Manager** — native Qt/QML + Kirigami desktop app with profile cards, wallpaper picker, settings, and system tray |
+
+Run from the source tree during development:
 
 ```bash
 cd gui/qt-app
 uv venv && uv pip install -e ".[dev]"
 uv run kde-theme-manager  # or: python -m src
 ```
+
+For normal use install it once — see below.
 
 Requires KDE Plasma 6 + Kirigami. See `gui/qt-app/README.md` for details.
 
@@ -73,12 +77,36 @@ Optional:
 ~/theme-profile-kit/scripts/install-theme-profile-kit.sh
 ```
 
-Creates timestamped backups of existing scripts in `~/.config/theme-profile/backups/`.
+Installs the command line scripts **and** the GUI (app copy, launcher, desktop
+entry). Creates timestamped backups of every replaced file in
+`~/.config/theme-profile/backups/`.
+
+| Installed | Where |
+|---|---|
+| `theme-profile`, `theme-menu`, `wallpaper-picker`, `wallpaper-next`, `wallpaper-prev` | `~/.local/bin/` |
+| KDE Theme Manager (app copy) | `~/.local/share/kde-theme-manager/` |
+| `kde-theme-manager` launcher | `~/.local/bin/` |
+| desktop entry | `~/.local/share/applications/kde-theme-manager.desktop` |
+| app icon | `~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg` |
+
+**Data is separate from code** — profiles, backups and settings live in
+`~/.config/theme-profile/` (`profiles/`, `backups/`, `manifests/`,
+`active-profile`, `app-preferences.json`) and are never touched by an install.
+The applied theme itself is the usual KDE configuration (`kdeglobals`,
+`kwinrc`, `gtk-3.0/settings.ini`, …).
 
 Options:
 ```bash
-install-theme-profile-kit.sh --help   # show help
+install-theme-profile-kit.sh --help      # show help
+install-theme-profile-kit.sh --no-gui    # scripts only, no app
+
+# GUI alone (paths, --with-venv / --no-venv and details):
+scripts/install-kde-theme-manager.sh --help
 ```
+
+A virtual environment is created inside the installed app only when the system
+Python cannot `import PySide6` (e.g. `pyside6` is not installed from the
+distro); with a system PySide6 the copy stays ~650 KB.
 
 ## Usage / Использование
 
@@ -138,16 +166,26 @@ Profiles live in `~/.config/theme-profile/profiles/`.
 ~/theme-profile-kit/scripts/update-theme-profile-kit.sh
 ```
 
-Fetches latest from git (`--ff-only`), then reinstalls scripts. Warns if you have uncommitted local changes.
+Fetches latest from git (`--ff-only`), then reinstalls the scripts **and** the GUI
+(re-runs the installer, so the launcher, desktop entry and icon are refreshed
+too). Warns if you have uncommitted local changes.
 
 ## Uninstall / Удаление
 
 ```bash
 ~/theme-profile-kit/scripts/uninstall-theme-profile-kit.sh      # interactive (confirms)
 ~/theme-profile-kit/scripts/uninstall-theme-profile-kit.sh --force  # skip confirmation
+~/theme-profile-kit/scripts/uninstall-theme-profile-kit.sh --no-gui # keep the app
+
+# GUI alone (profiles and data are kept):
+scripts/uninstall-kde-theme-manager.sh
 ```
 
-Removes scripts from `~/.local/bin/` and wipes `~/.config/theme-profile/`. Does **not** touch your KDE config files, wofi styles, or application settings — those must be reverted manually. See [Rollback & Recovery](#rollback--восстановление).
+Removes the scripts from `~/.local/bin/`, the app from
+`~/.local/share/kde-theme-manager/`, its launcher, desktop entry and icon, and
+wipes `~/.config/theme-profile/`. Does **not** touch your KDE config files, wofi
+styles, or application settings — those must be reverted manually.
+See [Rollback & Recovery](#rollback--восстановление).
 
 ## Rollback / Восстановление
 
@@ -155,6 +193,7 @@ See [`docs/ROLLBACK.md`](docs/ROLLBACK.md) for full instructions. Quick summary:
 
 - **Undo profile apply**: pre-apply backups are at `~/.config/theme-profile/backups/pre-apply-<name>-<ts>/`
 - **Restore old scripts**: `cp -a ~/.config/theme-profile/backups/deploy-*/bin/. ~/.local/bin/`
+- **Restore the previous app**: `cp -a ~/.config/theme-profile/backups/deploy-kde-theme-manager-*/app/. ~/.local/share/kde-theme-manager/`
 - **Plasma won't start**: `systemctl --user start plasma-plasmashell.service`
 - **Full remove**: `uninstall-theme-profile-kit.sh --force`
 

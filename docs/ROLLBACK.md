@@ -64,10 +64,23 @@ script, the old version is backed up:
 ~/.config/theme-profile/backups/deploy-theme-profile-kit-<YYYYMMDD-HHMMSS>/bin/
 ```
 
+The GUI installer backs up everything it replaces (the previous app copy, the
+launcher, the desktop entry) in a sibling directory:
+
+```text
+~/.config/theme-profile/backups/deploy-kde-theme-manager-<YYYYMMDD-HHMMSS>/
+├── app/                              previous ~/.local/share/kde-theme-manager
+├── legacy-theme-profile-manager/     the old hand-made copy, if it was there
+├── bin/kde-theme-manager             previous launcher
+└── applications/kde-theme-manager.desktop
+
+```
+
 ### To restore a previous installer backup:
 
 ```bash
 cp -a ~/.config/theme-profile/backups/deploy-theme-profile-kit-YYYYMMDD-HHMMSS/bin/. ~/.local/bin/
+cp -a ~/.config/theme-profile/backups/deploy-kde-theme-manager-YYYYMMDD-HHMMSS/app/. ~/.local/share/kde-theme-manager/
 ```
 
 Then verify:
@@ -113,6 +126,10 @@ Or interactively (confirms before deletion):
 
 This removes:
 - `~/.local/bin/theme-profile`, `theme-menu`, `wallpaper-picker`, `wallpaper-next`, `wallpaper-prev`
+- the GUI: `~/.local/share/kde-theme-manager/`, `~/.local/bin/kde-theme-manager`,
+  `~/.local/share/applications/kde-theme-manager.desktop`,
+  `~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg`
+  (keep the app with `--no-gui`; remove only it with `uninstall-kde-theme-manager.sh`)
 
 **But does NOT touch** — you must revert these manually if needed:
 - `~/.config/wofi/*.css` — wofi styles

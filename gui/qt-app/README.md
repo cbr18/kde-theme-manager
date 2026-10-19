@@ -87,13 +87,58 @@ files and takes seconds. Two consequences shape the UI:
 
 ## Installation
 
+Normal use — one command installs the app, its launcher and the desktop entry
+(with a backup of whatever it replaces):
+
 ```bash
-# From theme-profile-kit root
+# From the theme-profile-kit root
+scripts/install-kde-theme-manager.sh
+
+# Options
+scripts/install-kde-theme-manager.sh --help       # paths and details
+scripts/install-kde-theme-manager.sh --no-venv    # never build a venv
+scripts/install-kde-theme-manager.sh --with-venv  # always build one
+
+# Remove it again (profiles and data are kept)
+scripts/uninstall-kde-theme-manager.sh
+```
+
+| Installed | Where |
+|---|---|
+| application copy | `~/.local/share/kde-theme-manager/` |
+| launcher (`kde-theme-manager`) | `~/.local/bin/` |
+| desktop entry | `~/.local/share/applications/kde-theme-manager.desktop` |
+| icon | `~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg` |
+| backups of replaced files | `~/.config/theme-profile/backups/deploy-kde-theme-manager-*/` |
+
+`~/.local/share` and `~/.local/bin` follow `XDG_DATA_HOME` / `XDG_BIN_HOME`.
+A venv is created inside the app copy **only** when the system Python cannot
+`import PySide6`; with the distro `pyside6` the copy is ~650 KB and runs on it
+directly. The launcher respects `KDE_THEME_MANAGER_DIR` if you keep the app
+somewhere else.
+
+Where the data lives (never touched by install/update):
+
+```
+~/.config/theme-profile/
+├── profiles/<name>/     the profiles themselves (theme snapshots)
+├── backups/             pre-apply + deploy backups
+├── manifests/           what a profile covers
+├── active-profile       currently applied profile
+└── app-preferences.json GUI settings (created when you first save settings)
+```
+
+The theme itself is not stored by the app — applying a profile writes the usual
+KDE configuration (`~/.config/kdeglobals`, `kwinrc`, `gtk-3.0/settings.ini`, …).
+Wallpapers live in `~/Изображения/Wallpaper` (or `wallpaper_directory` from the
+settings) with the index cache in `~/.cache/wallpaper_index`.
+
+### Running from the source tree (development)
+
+```bash
 cd gui/qt-app
 uv pip install -e ".[dev]"  # or pip install -e ".[dev]"
-
-# Or install system-wide (requires PySide6)
-pip install -e .
+./theme-profile-manager.sh  # sets QML import paths, prefers ./.venv, then python -m src
 ```
 
 ## Development
@@ -116,7 +161,7 @@ mypy src/
 # Tests (Python: 73, from gui/qt-app)
 .venv/bin/python -m pytest tests/ -q
 
-# Tests (bash tooling: 44, from the repo root)
+# Tests (bash tooling: 79, from the repo root)
 bash tests/test-scripts.sh
 
 # Static shell analysis (repo root)
@@ -264,9 +309,19 @@ Settings stored in `~/.config/theme-profile/app-preferences.json`:
 
 ### Desktop Entry
 
-Installed via `theme-profile-kit/scripts/install-theme-profile-kit.sh`:
-- `~/.local/bin/kde-theme-manager` — wrapper script
+Installed by `theme-profile-kit/scripts/install-kde-theme-manager.sh` (which
+`install-theme-profile-kit.sh` runs by default):
+
+- `~/.local/bin/kde-theme-manager` — launcher (execs the app's own
+  `theme-profile-manager.sh`, which sets the QML import paths)
+- `~/.local/share/kde-theme-manager/` — the app copy
 - `~/.local/share/applications/kde-theme-manager.desktop`
+- `~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg`
+
+Both source files live in the repository, so edit them there:
+`resources/kde-theme-manager.desktop` and
+`resources/icons/kde-theme-manager.svg` (icon = dark/light disc with the Breeze
+accent ring). After editing, re-run the installer to redeploy.
 
 ### Standalone Binary (future)
 
