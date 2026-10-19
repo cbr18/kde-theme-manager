@@ -56,7 +56,7 @@ Installed files:
   ~/.local/share/kde-theme-manager/              application (copy)
   ~/.local/bin/kde-theme-manager                 launcher
   ~/.local/share/applications/kde-theme-manager.desktop
-  ~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg
+  ~/.local/share/icons/hicolor/scalable/apps/ktm-theme-manager.svg
   ~/.config/theme-profile/backups/deploy-kde-theme-manager-*/   backups
 
 Profiles and settings in ~/.config/theme-profile/ are never modified.
@@ -82,7 +82,7 @@ done
 
 for required in "$APP_SRC/src/__main__.py" "$APP_SRC/theme-profile-manager.sh" \
   "$APP_SRC/resources/kde-theme-manager.desktop" \
-  "$APP_SRC/resources/icons/kde-theme-manager.svg"; do
+  "$APP_SRC/resources/icons/ktm-theme-manager.svg"; do
   if [ ! -f "$required" ]; then
     warn "Missing source: $required"
     exit 1
@@ -192,11 +192,16 @@ sed -i "s|@KIT_DIR@|$KIT_DIR|g" "$BINDIR/kde-theme-manager"
 chmod 755 "$BINDIR/kde-theme-manager" "$APPDIR/theme-profile-manager.sh"
 
 # ── Desktop entry + icon ────────────────────────────────────────────────────
+# The icon name is deliberately not "kde-theme-manager": KDE's icon loader
+# collapses "<existing-icon>-<suffix>" to the existing icon, so that name
+# resolved to the KDE logo instead of our icon.
 say "Installing desktop entry and icon"
 install -m 644 "$APP_SRC/resources/kde-theme-manager.desktop" \
   "$APPSDIR/kde-theme-manager.desktop"
-install -m 644 "$APP_SRC/resources/icons/kde-theme-manager.svg" \
-  "$ICONDIR/kde-theme-manager.svg"
+install -m 644 "$APP_SRC/resources/icons/ktm-theme-manager.svg" \
+  "$ICONDIR/ktm-theme-manager.svg"
+# Icon names from before the rename (the loader-mangling one and its variants).
+rm -f "$ICONDIR/kde-theme-manager.svg"
 
 # ── Obsolete hand-made copy ─────────────────────────────────────────────────
 if [ -e "$LEGACY_APPDIR" ]; then

@@ -87,7 +87,7 @@ entry). Creates timestamped backups of every replaced file in
 | KDE Theme Manager (app copy) | `~/.local/share/kde-theme-manager/` |
 | `kde-theme-manager` launcher | `~/.local/bin/` |
 | desktop entry | `~/.local/share/applications/kde-theme-manager.desktop` |
-| app icon | `~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg` |
+| app icon | `~/.local/share/icons/hicolor/scalable/apps/ktm-theme-manager.svg` |
 
 **Data is separate from code** — profiles, backups and settings live in
 `~/.config/theme-profile/` (`profiles/`, `backups/`, `manifests/`,

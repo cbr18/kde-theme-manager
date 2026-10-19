@@ -420,7 +420,7 @@ check_installed "$FAKE_HOME/.local/share/kde-theme-manager/.installed-by-theme-p
 check_installed "$FAKE_HOME/.local/bin/kde-theme-manager" "launcher installed"
 check_installed "$FAKE_HOME/.local/share/applications/kde-theme-manager.desktop" \
   "desktop entry installed"
-check_installed "$FAKE_HOME/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg" \
+check_installed "$FAKE_HOME/.local/share/icons/hicolor/scalable/apps/ktm-theme-manager.svg" \
   "app icon installed"
 
 if [ -x "$FAKE_HOME/.local/bin/kde-theme-manager" ]; then
@@ -480,7 +480,7 @@ check_gone "$FAKE_HOME/.local/share/kde-theme-manager" "app copy removed"
 check_gone "$FAKE_HOME/.local/bin/kde-theme-manager" "launcher removed"
 check_gone "$FAKE_HOME/.local/share/applications/kde-theme-manager.desktop" \
   "desktop entry removed"
-check_gone "$FAKE_HOME/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg" \
+check_gone "$FAKE_HOME/.local/share/icons/hicolor/scalable/apps/ktm-theme-manager.svg" \
   "app icon removed"
 
 # An unrelated directory must survive removal.

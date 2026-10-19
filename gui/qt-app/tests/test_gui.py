@@ -1165,3 +1165,177 @@ def test_dialogs_compute_content_on_open() -> None:
     assert "onOpened: updatePreview()" in main_qml, (
         "previewDialog must compute its content when it opens"
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 21. System tray: quick profile switching
+#
+# The tray used to show a disabled "Profiles" placeholder. It now lists the
+# profiles (active one checked), applies them without blocking the GUI thread
+# and reports the result as a desktop notification.
+# ─────────────────────────────────────────────────────────────────────────────
+class TestSystemTray:
+    """Tray menu model + wiring."""
+
+    @staticmethod
+    def _controller():
+        from system_tray import SystemTrayController
+
+        return SystemTrayController.instance()
+
+    def test_profile_entries_put_active_first(self) -> None:
+        entries = self._controller()._profile_entries(
+            [
+                {"name": "paper", "componentCount": 20, "isActive": False},
+                {"name": "glass", "componentCount": 20, "isActive": True},
+            ],
+            "glass",
+        )
+        assert [e["name"] for e in entries] == ["glass", "paper"]
+        assert [e["active"] for e in entries] == [True, False]
+
+    def test_profile_entries_label_carries_component_count(self) -> None:
+        entries = self._controller()._profile_entries(
+            [{"name": "glass", "componentCount": 20}], "glass"
+        )
+        assert entries[0]["label"] == "glass (20)"
+
+    def test_profile_entries_ignore_empty_and_plain_strings(self) -> None:
+        entries = self._controller()._profile_entries(
+            [{"name": ""}, {"name": "solo"}, "plain"], "solo"
+        )
+        assert [e["name"] for e in entries] == ["solo", "plain"]
+        assert entries[0]["label"] == "solo"  # no count → no suffix
+
+    def test_profile_entries_handle_missing_input(self) -> None:
+        assert self._controller()._profile_entries(None, "") == []
+        assert self._controller()._profile_entries([], "glass") == []
+
+    def test_tray_applies_through_the_controller_off_the_gui_thread(self) -> None:
+        source = (SRC_DIR / "system_tray.py").read_text()
+        assert "controller.applyProfile(name)" in source, (
+            "the tray must apply profiles through ProfileController.applyProfile "
+            "(which runs the operation on the thread pool)"
+        )
+        assert "_pending_profile" in source, (
+            "the tray must remember which profile it started, so it knows "
+            "whether an operationFinished signal belongs to it"
+        )
+        assert "subprocess" not in source, "the tray must not shell out itself"
+
+    def test_tray_wires_controllers_from_main_controller(self) -> None:
+        import ast
+
+        tree = ast.parse((SRC_DIR / "system_tray.py").read_text())
+        register = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "register_system_tray"
+        )
+        params = [a.arg for a in register.args.args]
+        assert params[:3] == ["engine", "main_window", "main_controller"], params
+
+        body = ast.dump(register)
+        for call in ("set_profile_controller", "set_wallpaper_controller"):
+            assert call in body, f"register_system_tray must call {call}"
+
+    def test_tray_has_a_quit_action(self) -> None:
+        """Minimize-to-tray must not leave the app without a way out."""
+        source = (SRC_DIR / "system_tray.py").read_text()
+        assert "QCoreApplication.quit()" in source
+        assert "self._quit_app" in source
+
+    def test_tray_notifies_via_show_message(self) -> None:
+        """Notifications must go through QSystemTrayIcon.showMessage.
+
+        A hand-built org.freedesktop.Notifications.Notify call is silently
+        dropped: PySide6 marshals Python ints as D-Bus 'i' while Notify's
+        replaces_id is 'u', so the daemon answers "No such method 'Notify'"
+        (verified with dbus-monitor on Plasma 6).
+        """
+        source = (SRC_DIR / "system_tray.py").read_text()
+        assert "showMessage(" in source
+        assert '"Notify"' not in source, (
+            "the hand-built Notify call is rejected by the notification daemon"
+        )
+
+    def test_minimize_to_tray_is_guarded_in_qml(self) -> None:
+        main_qml = (PROJECT_ROOT / "qml" / "Main.qml").read_text()
+        assert "onClosing" in main_qml, (
+            "closing the window must consult the minimize-to-tray preference"
+        )
+        assert "trayController.trayIconVisible" in main_qml, (
+            "hiding the window without a tray icon would make the app unreachable"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 22. Wallpaper operations are asynchronous
+#
+# Opening the picker is interactive (wofi stays open until the user picks),
+# so every wallpaper operation runs on the thread pool and the UI disables
+# its buttons while one is in flight.
+# ─────────────────────────────────────────────────────────────────────────────
+def test_wallpaper_controller_operations_are_async() -> None:
+    source = (SRC_DIR / "controllers" / "__init__.py").read_text()
+    start = source.index("class WallpaperController")
+    end = source.index("class TrackedAppsController")
+    block = source[start:end]
+
+    assert "_run_async(self" in block, (
+        "wallpaper operations must not run on the GUI thread"
+    )
+    for method in ("nextWallpaper", "prevWallpaper", "pickWallpaper", "setWallpaper"):
+        assert f"def {method}" in block, f"{method} disappeared from the controller"
+
+    # `busy` must be a Property with a change signal so QML/tray can react.
+    assert "@Property(bool, notify=busyChanged)" in block
+    assert "busyChanged = Signal()" in block
+
+
+def test_qml_disables_wallpaper_buttons_while_busy() -> None:
+    main_qml = (PROJECT_ROOT / "qml" / "Main.qml").read_text()
+    assert main_qml.count("enabled: !wallpaperController.busy") == 3, (
+        "Previous/Pick/Next must all be disabled while an operation runs"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 23. Application icon
+# ─────────────────────────────────────────────────────────────────────────────
+def test_app_icon_matches_the_desktop_entry() -> None:
+    """The icon name used at runtime must be the one the .desktop installs."""
+    from app_icon import FALLBACK_ICON_NAME, ICON_NAME
+
+    desktop = (PROJECT_ROOT / "resources" / "kde-theme-manager.desktop").read_text()
+    assert f"Icon={ICON_NAME}" in desktop, (
+        "app_icon.ICON_NAME and the desktop entry's Icon= must agree"
+    )
+    assert (PROJECT_ROOT / "resources" / "icons" / f"{ICON_NAME}.svg").is_file(), (
+        "the svg the installer deploys is missing"
+    )
+    assert FALLBACK_ICON_NAME == "preferences-desktop-theme"
+
+
+def test_tray_and_window_use_the_shared_icon() -> None:
+    assert "app_icon()" in (SRC_DIR / "system_tray.py").read_text()
+    assert "app_icon()" in (SRC_DIR / "__main__.py").read_text()
+
+
+def test_icon_name_survives_kde_icon_loader() -> None:
+    """KDE's loader collapses "<existing-icon>-<suffix>" to the existing icon.
+
+    ``kde-theme-manager`` therefore resolved to the *KDE logo* and
+    ``plasma-theme-manager`` to the Plasma logo, so the tray/menu icon was the
+    wrong picture (verified on Plasma 6 via QIcon.fromTheme). The icon name
+    must keep a first dash-separated token that cannot be an existing icon.
+    """
+    from app_icon import ICON_NAME
+
+    reserved = {"kde", "plasma", "org", "theme", "preferences", "application"}
+    first_token = ICON_NAME.split("-")[0].lower()
+    assert first_token not in reserved, (
+        f"{ICON_NAME!r} starts with {first_token!r}, which KDE's icon loader "
+        "may resolve to that icon instead"
+    )
+    assert ICON_NAME != "kde-theme-manager"

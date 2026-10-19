@@ -14,10 +14,38 @@ Native KDE Plasma application for managing theme profiles and wallpapers.
 - **Granular Control** — Choose which components to apply per profile
   (*Settings* page in the global drawer)
 - **Wallpaper Management** — Picker with previews, next/prev navigation
+- **System Tray** — quick profile switching (active profile ticked), wallpaper
+  next/prev/pick and desktop notifications, without opening the window
 - **App Detection** — Automatically detects installed/configured apps
-- **Non-blocking** — apply/save/delete run off the GUI thread with a busy state
+- **Non-blocking** — apply/save/delete *and* wallpaper operations (including the
+  interactive picker) run off the GUI thread with a busy state
 - **Dogfooding** — App themes itself from the *active* profile
 - **Clean Architecture** — Core protocol ready for Rust rewrite
+
+## System tray
+
+The tray icon offers, without opening the window:
+
+- **Profiles ▸** — every profile, the active one ticked and sorted first; a
+  click applies it immediately (quick switching, no confirmation dialog), with
+  the result reported as a desktop notification. Entries are disabled while an
+  operation runs, and clicking the active profile is a no-op.
+- **Wallpaper ▸** — Next / Previous / Pick (the current file name is shown
+  below them).
+- **Show** — raise the window (double-clicking the icon toggles it).
+- **Quit** — really quits. Needed because *Settings → Minimize to system tray*
+  makes the window's close button hide the app instead; hiding is only done
+  when the tray icon actually exists, so the window can never become
+  unreachable.
+
+Notifications go through `QSystemTrayIcon.showMessage`, not a hand-built
+`org.freedesktop.Notifications.Notify` call: PySide6 marshals Python ints as
+D-Bus `i` while `Notify`'s `replaces_id` is `u`, so a hand-built call is
+rejected with *"No such method 'Notify'"* and dropped silently.
+
+The icon is installed as `ktm-theme-manager`: KDE's icon loader collapses
+`<existing-icon>-<suffix>` to the existing icon, so `kde-theme-manager`
+resolved to the KDE logo (and `plasma-*` to the Plasma logo) instead of ours.
 
 ## Theming (dogfooding)
 
@@ -108,7 +136,7 @@ scripts/uninstall-kde-theme-manager.sh
 | application copy | `~/.local/share/kde-theme-manager/` |
 | launcher (`kde-theme-manager`) | `~/.local/bin/` |
 | desktop entry | `~/.local/share/applications/kde-theme-manager.desktop` |
-| icon | `~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg` |
+| icon | `~/.local/share/icons/hicolor/scalable/apps/ktm-theme-manager.svg` |
 | backups of replaced files | `~/.config/theme-profile/backups/deploy-kde-theme-manager-*/` |
 
 `~/.local/share` and `~/.local/bin` follow `XDG_DATA_HOME` / `XDG_BIN_HOME`.
@@ -158,7 +186,7 @@ mypy src/
 # QML syntax/type lint (PySide6 6.12 ships its own qmllint)
 .venv/bin/pyside6-qmllint -I qml -I /usr/lib/qt6/qml qml/Main.qml qml/pages/SettingsPage.qml qml/Components/*.qml
 
-# Tests (Python: 73, from gui/qt-app)
+# Tests (Python: 88, from gui/qt-app)
 .venv/bin/python -m pytest tests/ -q
 
 # Tests (bash tooling: 80, from the repo root)
@@ -316,11 +344,11 @@ Installed by `theme-profile-kit/scripts/install-kde-theme-manager.sh` (which
   `theme-profile-manager.sh`, which sets the QML import paths)
 - `~/.local/share/kde-theme-manager/` — the app copy
 - `~/.local/share/applications/kde-theme-manager.desktop`
-- `~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg`
+- `~/.local/share/icons/hicolor/scalable/apps/ktm-theme-manager.svg`
 
 Both source files live in the repository, so edit them there:
 `resources/kde-theme-manager.desktop` and
-`resources/icons/kde-theme-manager.svg` (icon = dark/light disc with the Breeze
+`resources/icons/ktm-theme-manager.svg` (icon = dark/light disc with the Breeze
 accent ring). After editing, re-run the installer to redeploy.
 
 ### Standalone Binary (future)
@@ -337,8 +365,8 @@ cargo build --release
 ## Roadmap
 
 - [x] Profile preview before apply (Preview / Diff dialogs)
-- [ ] System tray: quick profile switching (icon + show/hide exists; the
-      "Profiles" submenu is still a placeholder)
+- [x] System tray: quick profile switching (active profile ticked, wallpaper
+      next/prev/pick, notifications, Quit)
 - [ ] Global hotkey (Meta+T)
 - [ ] Auto-sync with system theme changes
 - [ ] Rust core implementation

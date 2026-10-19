@@ -12,7 +12,9 @@ DATADIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 APPDIR="$DATADIR/kde-theme-manager"
 LEGACY_APPDIR="$DATADIR/theme-profile-manager"
 APPSDIR="$DATADIR/applications"
-ICON="$DATADIR/icons/hicolor/scalable/apps/kde-theme-manager.svg"
+ICON="$DATADIR/icons/hicolor/scalable/apps/ktm-theme-manager.svg"
+# Name used before the rename (KDE's icon loader mangled "kde-*" names).
+LEGACY_ICON="$DATADIR/icons/hicolor/scalable/apps/kde-theme-manager.svg"
 MARKER=".installed-by-theme-profile-kit"
 
 usage() {
@@ -29,7 +31,7 @@ Removed:
   ~/.local/share/kde-theme-manager/
   ~/.local/bin/kde-theme-manager
   ~/.local/share/applications/kde-theme-manager.desktop
-  ~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg
+  ~/.local/share/icons/hicolor/scalable/apps/ktm-theme-manager.svg
 
 Kept: ~/.config/theme-profile/ (profiles, backups, settings) and the
 theme-profile / wallpaper-* scripts.
@@ -71,6 +73,7 @@ rm -f "$BINDIR/kde-theme-manager"
 say "Removing desktop entry and icon"
 rm -f "$APPSDIR/kde-theme-manager.desktop"
 rm -f "$ICON"
+rm -f "$LEGACY_ICON"
 
 # Only delete directories this installer created: a wrong XDG_DATA_HOME must
 # not turn into `rm -rf` of somebody else's tree.

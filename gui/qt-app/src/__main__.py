@@ -22,6 +22,7 @@ from PySide6.QtGui import QPalette, QColor
 import PySide6.QtQuick  # noqa: F401
 
 # Импорт контроллеров
+from app_icon import app_icon
 from controllers import MainController, register_controllers
 from theme_controller import register_theme_controller
 from system_tray import register_system_tray
@@ -131,7 +132,7 @@ def main() -> int:
     )
 
     app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon.fromTheme("preferences-desktop-theme"))
+    app.setWindowIcon(app_icon())
 
     # Ensure valid palette for Kirigami (PySide6 bundled Qt may lack KDE palette)
     _setup_palette(app)
@@ -183,7 +184,7 @@ def main() -> int:
     # Получить главное окно и зарегистрировать System Tray
     # (требуется окно; QSystemTrayIcon создаётся ровно один раз)
     main_window = engine.rootObjects()[0]
-    register_system_tray(engine, main_window)
+    register_system_tray(engine, main_window, main_controller)
 
     # Apply theme synchronously before showing (avoid light flash)
     # sync_theme was triggered during initialize(); force-apply now

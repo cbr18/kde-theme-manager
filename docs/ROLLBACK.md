@@ -128,7 +128,7 @@ This removes:
 - `~/.local/bin/theme-profile`, `theme-menu`, `wallpaper-picker`, `wallpaper-next`, `wallpaper-prev`
 - the GUI: `~/.local/share/kde-theme-manager/`, `~/.local/bin/kde-theme-manager`,
   `~/.local/share/applications/kde-theme-manager.desktop`,
-  `~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg`
+  `~/.local/share/icons/hicolor/scalable/apps/ktm-theme-manager.svg`
   (keep the app with `--no-gui`; remove only it with `uninstall-kde-theme-manager.sh`)
 
 **But does NOT touch** — you must revert these manually if needed:

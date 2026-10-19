@@ -238,12 +238,14 @@ class WallpaperController(QObject):
     wallpapersChanged = Signal()
     operationStarted = Signal(str)
     operationFinished = Signal(bool, str)
+    busyChanged = Signal()
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
         self._core: WallpaperCore = CoreFactory.wallpaper_core()
         self._wallpapers: list[str] = []
         self._current_wallpaper: str = ""
+        self._busy: bool = False
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.timeout.connect(self._delayed_refresh)
@@ -256,6 +258,21 @@ class WallpaperController(QObject):
     def wallpapers(self) -> list:
         return self._wallpapers
 
+    @Property(bool, notify=busyChanged)
+    def busy(self) -> bool:
+        """True while a background wallpaper operation runs.
+
+        Opening the picker (wofi) can take as long as the user needs, so it
+        must never run on the GUI thread — this is what the tray menu and the
+        QML buttons key off.
+        """
+        return self._busy
+
+    def _set_busy(self, value: bool) -> None:
+        if self._busy != value:
+            self._busy = value
+            self.busyChanged.emit()
+
     @Slot()
     def refresh(self) -> None:
         self._wallpapers = self._core.list_wallpapers()
@@ -266,39 +283,58 @@ class WallpaperController(QObject):
     def _delayed_refresh(self) -> None:
         self.refresh()
 
+    def _start_operation(self, name: str, func: Callable[[], tuple[bool, str]]) -> None:
+        """Запустить фоновую операцию (не блокирует UI)."""
+        if self._busy:
+            return
+        self._set_busy(True)
+        self.operationStarted.emit(name)
+        _run_async(self, func, self._on_operation_finished)
+
+    @Slot(bool, str)
+    def _on_operation_finished(self, success: bool, message: str) -> None:
+        self._set_busy(False)
+        self.operationFinished.emit(success, message)
+        if success:
+            self._refresh_timer.start(500)
+
     @Slot(result=str)
     def pickWallpaper(self) -> str:
-        """Открыть пикер и вернуть путь."""
-        self.operationStarted.emit("pick")
-        path = self._core.pick()
-        self.operationFinished.emit(path is not None, path or "Cancelled")
-        if path:
-            self._refresh_timer.start(500)
-        return path or ""
+        """Открыть пикер в фоне.
+
+        Returns an empty string: the picker is interactive, so the result
+        arrives asynchronously through ``currentWallpaperChanged``.
+        """
+        def _work() -> tuple[bool, str]:
+            path = self._core.pick()
+            return path is not None, path or "Cancelled"
+
+        self._start_operation("pick", _work)
+        return ""
 
     @Slot()
     def nextWallpaper(self) -> None:
-        self.operationStarted.emit("next")
-        result = self._core.next()
-        self.operationFinished.emit(result.success, result.message)
-        if result.success:
-            self._refresh_timer.start(500)
+        def _work() -> tuple[bool, str]:
+            result = self._core.next()
+            return result.success, result.message
+
+        self._start_operation("next", _work)
 
     @Slot()
     def prevWallpaper(self) -> None:
-        self.operationStarted.emit("prev")
-        result = self._core.prev()
-        self.operationFinished.emit(result.success, result.message)
-        if result.success:
-            self._refresh_timer.start(500)
+        def _work() -> tuple[bool, str]:
+            result = self._core.prev()
+            return result.success, result.message
+
+        self._start_operation("prev", _work)
 
     @Slot(str)
     def setWallpaper(self, path: str) -> None:
-        self.operationStarted.emit("set")
-        result = self._core.set_wallpaper(path)
-        self.operationFinished.emit(result.success, result.message)
-        if result.success:
-            self._refresh_timer.start(500)
+        def _work() -> tuple[bool, str]:
+            result = self._core.set_wallpaper(path)
+            return result.success, result.message
+
+        self._start_operation("set", _work)
 
 
 # ──────────────────────────────────────────────────────────────

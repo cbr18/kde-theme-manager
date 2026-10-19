@@ -20,6 +20,18 @@ Kirigami.ApplicationWindow {
     // True while the controller is applying/saving/deleting a profile.
     readonly property bool applying: profileController.busy
 
+    // Close → hide to the tray when the user asked for it (Settings →
+    // "Minimize to system tray"). Only when the tray icon really exists,
+    // otherwise the window would become unreachable; the tray menu's Quit
+    // action is the way out in that mode.
+    onClosing: function(close) {
+        if (typeof trayController !== "undefined" && trayController
+                && trayController.minimizeToTray && trayController.trayIconVisible) {
+            close.accepted = false
+            root.hide()
+        }
+    }
+
     // The window surface itself stays transparent in glass mode: the page
     // paints the translucent glass panel on top (see mainPage.background).
     color: ThemeColors.windowBg(root.glassMode)
@@ -362,6 +374,7 @@ Kirigami.ApplicationWindow {
                             Layout.fillWidth: true
                             text: qsTr("Previous")
                             icon.name: "go-previous-view"
+                            enabled: !wallpaperController.busy
                             onClicked: wallpaperController.prevWallpaper()
                         }
                         Button {
@@ -369,12 +382,14 @@ Kirigami.ApplicationWindow {
                             text: qsTr("Pick Wallpaper…")
                             icon.name: "image-x-generic"
                             highlighted: true
+                            enabled: !wallpaperController.busy
                             onClicked: wallpaperController.pickWallpaper()
                         }
                         Button {
                             Layout.fillWidth: true
                             text: qsTr("Next")
                             icon.name: "go-next-view"
+                            enabled: !wallpaperController.busy
                             onClicked: wallpaperController.nextWallpaper()
                         }
                     }

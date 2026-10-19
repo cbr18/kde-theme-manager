@@ -37,7 +37,7 @@
 | KDE Theme Manager (копия приложения) | `~/.local/share/kde-theme-manager/` |
 | обёртка `kde-theme-manager` | `~/.local/bin/` |
 | ярлык | `~/.local/share/applications/kde-theme-manager.desktop` |
-| иконка | `~/.local/share/icons/hicolor/scalable/apps/kde-theme-manager.svg` |
+| иконка | `~/.local/share/icons/hicolor/scalable/apps/ktm-theme-manager.svg` |
 
 Только скрипты: `install-theme-profile-kit.sh --no-gui`.
 Отдельно GUI: `scripts/install-kde-theme-manager.sh` (venv создаётся лишь
