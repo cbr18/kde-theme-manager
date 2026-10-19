@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import inspect
 import subprocess
 import sys
 import tempfile
@@ -410,6 +411,8 @@ def test_qml_files_exist() -> None:
     assert (qml_dir / "Components" / "ComponentCheckbox.qml").exists()
     assert (qml_dir / "Components" / "ProfileCardDelegate.qml").exists()
     assert (qml_dir / "Components" / "ProfileRadioButton.qml").exists()
+    assert (qml_dir / "Components" / "ThemeColors.qml").exists()
+    assert (qml_dir / "Components" / "TypeScale.qml").exists()
     assert (qml_dir / "pages" / "SettingsPage.qml").exists()
 
 
@@ -424,13 +427,15 @@ def test_no_duplicate_components_dir() -> None:
 
 
 def test_qmldir_lists_all_components() -> None:
-    """qmldir must declare all four component QML types."""
+    """qmldir must declare all four component QML types and the two singletons."""
     qmldir = (PROJECT_ROOT / "qml" / "Components" / "qmldir").read_text()
     assert "module Components" in qmldir
     assert "ProfileCardDelegate" in qmldir
     assert "ProfileRadioButton" in qmldir
     assert "ComponentCategoryGroup" in qmldir
     assert "ComponentCheckbox" in qmldir
+    assert "singleton ThemeColors" in qmldir
+    assert "singleton TypeScale" in qmldir
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -645,10 +650,6 @@ def test_main_has_glass_styling() -> None:
     assert "property bool glassMode: themeController.isGlass" in main_qml, (
         "Main.qml must expose glassMode bound to themeController.isGlass"
     )
-    # Translucent colors are how glass is implemented (no opaque alpha=1 fills).
-    assert "Qt.rgba(" in main_qml, (
-        "Main.qml must use translucent Qt.rgba() colors for glass mode"
-    )
     # The page must paint its own glass panel / background, not rely on the
     # Kirigami default Platform.Theme.backgroundColor (which was the white bug).
     assert "background: Rectangle" in main_qml, (
@@ -656,6 +657,16 @@ def test_main_has_glass_styling() -> None:
     )
     assert main_qml.count("root.glassMode") >= 2, (
         "The page/window background must react to glassMode"
+    )
+    # Translucent colours are how glass is implemented. They live in the
+    # ThemeColors singleton now (Main.qml must not carry its own colour
+    # literals), so assert it there.
+    theme_colors = (PROJECT_ROOT / "qml" / "Components" / "ThemeColors.qml").read_text()
+    assert "Qt.rgba(" in theme_colors, (
+        "ThemeColors.qml must use translucent Qt.rgba() colours for glass mode"
+    )
+    assert "glassPanel" in theme_colors, (
+        "ThemeColors.qml must expose the glass panel colour"
     )
 
 
@@ -669,8 +680,11 @@ def test_selection_is_separate_from_apply() -> None:
         "Main.qml must track a pending selectedProfile"
     )
     # The radio delegate only sets the selection...
-    assert "onProfileClicked: root.selectedProfile = profileName" in main_qml, (
+    assert "onProfileClicked: function(profileName)" in main_qml, (
         "Clicking a profile must only select it, not apply it"
+    )
+    assert "root.selectedProfile = profileName" in main_qml, (
+        "Clicking a profile must only assign the pending selection"
     )
     # ...and a dedicated Apply button performs the (slow) application.
     assert "profileController.applyProfile(root.selectedProfile)" in main_qml, (
@@ -722,3 +736,289 @@ def shutil_path_in_init(content: str) -> bool:
     # Check for local/bin fallback
     has_fallback = ".local/bin" in content
     return has_which and has_fallback
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 23. Typography: font sizes must not be bound to layout spacing tokens
+# ─────────────────────────────────────────────────────────────────────────────
+def test_qml_font_sizes_not_bound_to_spacing_tokens() -> None:
+    """No QML file may use Platform.Units.*Spacing as a font.pointSize.
+
+    In this environment gridUnit=18, smallSpacing=4, mediumSpacing=6, so those
+    bindings rendered body text at 4-6 pt (visually illegible).
+    """
+    qml_dir = PROJECT_ROOT / "qml"
+    offenders = []
+    for qml_file in qml_dir.rglob("*.qml"):
+        for i, line in enumerate(qml_file.read_text().split("\n"), 1):
+            stripped = line.strip()
+            if not stripped.startswith("font.pointSize"):
+                continue
+            if "TypeScale." not in stripped:
+                offenders.append(f"{qml_file.relative_to(qml_dir)}:{i}: {stripped}")
+    assert not offenders, (
+        "font.pointSize must come from TypeScale: " + "; ".join(offenders)
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 24. ThemeColors / TypeScale are the single source of colour and type
+# ─────────────────────────────────────────────────────────────────────────────
+def test_themecolors_is_the_only_colour_source() -> None:
+    """Only ThemeColors.qml may read Kirigami.Theme directly (plus safeColor)."""
+    qml_dir = PROJECT_ROOT / "qml"
+    offenders = []
+    for qml_file in qml_dir.rglob("*.qml"):
+        if qml_file.name == "ThemeColors.qml":
+            continue
+        content = qml_file.read_text()
+        if "Kirigami.Theme." in content or "function safeColor" in content:
+            offenders.append(str(qml_file.relative_to(qml_dir)))
+    assert not offenders, (
+        "These files duplicate the colour logic instead of using ThemeColors: "
+        + ", ".join(offenders)
+    )
+
+    theme_colors = (qml_dir / "Components" / "ThemeColors.qml").read_text()
+    assert "pragma Singleton" in theme_colors
+    assert "function safeColor" in theme_colors
+
+    type_scale = (qml_dir / "Components" / "TypeScale.qml").read_text()
+    assert "pragma Singleton" in type_scale
+    for token in ("base", "body", "subtitle", "title", "caption"):
+        assert token in type_scale, f"TypeScale must expose '{token}'"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 25. QQC2 controls must not own their own `checked` state (D-03)
+# ─────────────────────────────────────────────────────────────────────────────
+@pytest.mark.parametrize(
+    "rel_path",
+    ["Components/ProfileRadioButton.qml", "Components/ComponentCheckbox.qml"],
+)
+def test_checked_binding_is_repairable(rel_path: str) -> None:
+    """Radio/checkbox state must be corrected after a user click destroys the binding.
+
+    A QQC2 control writes to `checked` on click, which kills a plain
+    `checked: model.x` binding; two cards could then look checked at once.
+    `Binding { restoreMode: ... }` re-arms it.
+    """
+    content = (PROJECT_ROOT / "qml" / rel_path).read_text()
+    assert "Binding.RestoreBindingOrValue" in content, (
+        f"{rel_path} must declare a Binding with restoreMode to survive user clicks"
+    )
+    assert "Binding {" in content, f"{rel_path} must use a Binding element"
+
+
+def test_category_group_uses_modeldata() -> None:
+    """Slot-returned list-of-dicts models are only readable via modelData."""
+    content = (
+        PROJECT_ROOT / "qml" / "Components" / "ComponentCategoryGroup.qml"
+    ).read_text()
+    assert "modelData.id" in content, (
+        "ComponentCategoryGroup must read the delegate model via modelData.*"
+    )
+    assert "model.id" not in content, (
+        "model.<key> is undefined for @Slot(result=list) models in Qt 6.12"
+    )
+    assert "componentsRevision" in content, (
+        "The model binding must depend on componentsRevision so it re-evaluates "
+        "after the asynchronous registry detection"
+    )
+    assert "signal selectionChanged(var components)" in content, (
+        "ComponentCategoryGroup must emit the new full selection"
+    )
+    assert "group.selectedComponents = " not in content, (
+        "ComponentCategoryGroup must never assign to its parent-bound property"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 26. Preview dialog computes its content at open time (D-02)
+# ─────────────────────────────────────────────────────────────────────────────
+def test_preview_dialog_computes_on_open() -> None:
+    """The preview must be built when the dialog opens, not from a property handler."""
+    main_qml = (PROJECT_ROOT / "qml" / "Main.qml").read_text()
+    assert "function updatePreview()" in main_qml, (
+        "previewDialog must expose updatePreview()"
+    )
+    assert "onOpened: updatePreview()" in main_qml, (
+        "previewDialog must compute its content in onOpened"
+    )
+    assert "onPreviewProfileChanged" not in main_qml, (
+        "The property-changed handler ran before activeProfile was assigned "
+        "(empty chips / stale diff) and must be gone"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 27. Settings page is reachable (D-20) and loadable (D-01)
+# ─────────────────────────────────────────────────────────────────────────────
+def test_settings_page_is_wired_up() -> None:
+    """Main.qml must reach SettingsPage through the global drawer."""
+    main_qml = (PROJECT_ROOT / "qml" / "Main.qml").read_text()
+    assert "globalDrawer" in main_qml, "Main.qml must define a globalDrawer"
+    assert 'pages/SettingsPage.qml' in main_qml, (
+        "The drawer must reference pages/SettingsPage.qml"
+    )
+
+
+def test_settings_page_uses_valid_types() -> None:
+    """SettingsPage must not use Kirigami types that do not exist."""
+    content = (PROJECT_ROOT / "qml" / "pages" / "SettingsPage.qml").read_text()
+    for bogus in ("Kirigami.RadioButton", "Kirigami.Switch", "Kirigami.Button"):
+        assert bogus not in content, (
+            f"{bogus} does not exist in Qt 6 Kirigami (use QtQuick.Controls)"
+        )
+    assert "import Components 1.0" in content, (
+        "SettingsPage uses ComponentCategoryGroup and must import the module"
+    )
+    assert "Kirigami.ScrollablePage" in content, (
+        "SettingsPage must be a ScrollablePage with a single layout child"
+    )
+    assert content.count("contentItem:") >= 1, (
+        "Each Kirigami.Card must assign an explicit contentItem"
+    )
+    assert "Kirigami.Separator" not in content, (
+        "Use a 1 px Rectangle instead of the heavy Kirigami.Separator"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 28. Controllers: cached models, async operations, single palette pass
+# ─────────────────────────────────────────────────────────────────────────────
+def test_profile_controller_caches_its_qml_model() -> None:
+    """ProfileController.profiles must return a cache, not rebuild per read."""
+    from controllers import ProfileController
+
+    source = inspect.getsource(ProfileController.profiles.fget)
+    assert "_profiles_model" in source, (
+        "profiles must return the cached _profiles_model list"
+    )
+    assert "for p in self._profiles" not in source, (
+        "profiles must not rebuild the model on every read"
+    )
+
+
+def test_profile_operations_run_off_the_gui_thread() -> None:
+    """apply/save/delete must be handed to QThreadPool and expose `busy`."""
+    content = (SRC_DIR / "controllers" / "__init__.py").read_text()
+    assert "QThreadPool" in content, "controllers must use QThreadPool"
+    assert "_start_operation" in content, (
+        "ProfileController must route write operations through _start_operation"
+    )
+    assert "_OperationWorker" in content and "_OperationSignals" in content, (
+        "A shared worker must exist for background operations"
+    )
+    from controllers import ProfileController
+
+    assert hasattr(ProfileController, "busy"), (
+        "ProfileController must expose a `busy` property for the busy indicator"
+    )
+    for slot in ("applyProfile", "saveProfile", "deleteProfile"):
+        body = inspect.getsource(getattr(ProfileController, slot))
+        assert "_start_operation" in body, (
+            f"{slot} must run through the thread pool, not block the GUI thread"
+        )
+
+
+def test_tracked_apps_detection_is_async() -> None:
+    """detect_all() must not run on the GUI thread during startup."""
+    from controllers import TrackedAppsController
+
+    source = inspect.getsource(TrackedAppsController.refresh)
+    assert "_run_async" in source, (
+        "TrackedAppsController.refresh must delegate detection to the thread pool"
+    )
+    assert hasattr(TrackedAppsController, "componentsRevision"), (
+        "TrackedAppsController must expose componentsRevision for QML"
+    )
+
+
+def test_theme_controller_single_palette_pass() -> None:
+    """No _apply_*_theme helper may chain into another one (double palette apply)."""
+    import theme_controller as theme_controller_mod
+
+    content = (SRC_DIR / "theme_controller.py").read_text()
+    assert "def _apply_flags" in content, (
+        "ThemeController must funnel every theme into a single _apply_flags pass"
+    )
+    helpers = ("_apply_glass_theme", "_apply_paper_theme", "_apply_dark_theme",
+               "_apply_light_theme", "_apply_system_theme")
+    for helper in helpers:
+        body = inspect.getsource(getattr(theme_controller_mod.ThemeController, helper))
+        for other in helpers:
+            if other != helper:
+                assert f"{other}(" not in body, (
+                    f"{helper} must not call {other} (double apply / double emit)"
+                )
+
+
+def test_settings_available_components_uses_no_core_detection() -> None:
+    """SettingsController must not trigger a detection when refreshing its cache."""
+    from controllers import SettingsController
+
+    source = inspect.getsource(SettingsController.refreshAvailableComponents)
+    assert "_tracked_apps" in source, (
+        "refreshAvailableComponents must read the wired tracked-apps controller "
+        "(calling get_all_components() on a cold cache blocks the GUI thread)"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 29. PySide6 @Slot() arity must match the Python signature
+# ─────────────────────────────────────────────────────────────────────────────
+def test_slots_declare_every_python_argument() -> None:
+    """A @Slot() with fewer argument types than the Python signature makes Qt
+    silently drop the extra arguments at call time.
+
+    That is what broke ``diffProfiles``: declared ``@Slot(str, result=str)`` but
+    implemented as ``(profile_a, profile_b)``, so every call from QML raised
+    "diffProfiles() missing 1 required positional argument: 'profile_b'" and the
+    preview dialog rendered an empty diff.
+    """
+    from PySide6.QtCore import QMetaMethod
+
+    from controllers import (
+        ProfileController, WallpaperController, TrackedAppsController,
+        SettingsController, MainController,
+    )
+
+    problems = []
+    for klass in (ProfileController, WallpaperController, TrackedAppsController,
+                  SettingsController, MainController):
+        meta = klass.staticMetaObject
+        for i in range(meta.methodOffset(), meta.methodCount()):
+            method = meta.method(i)
+            if method.methodType() != QMetaMethod.Slot:
+                continue
+            name = bytes(method.name()).decode()
+            signature = bytes(method.methodSignature()).decode()
+            args = signature[signature.find("(") + 1:signature.rfind(")")]
+            declared = len([a for a in args.split(",") if a.strip()])
+            func = getattr(klass, name, None)
+            if func is None:
+                continue
+            params = inspect.signature(func).parameters.values()
+            python_args = [
+                p for p in params
+                if p.kind in (p.POSITIONAL_OR_KEYWORD, p.POSITIONAL_ONLY)
+                and p.name != "self"
+            ]
+            if declared != len(python_args):
+                problems.append(
+                    f"{klass.__name__}.{name}: Qt slot declares {declared} "
+                    f"argument(s) but Python takes {len(python_args)}"
+                )
+    assert not problems, "; ".join(problems)
+
+
+def test_dialogs_compute_content_on_open() -> None:
+    """Both content-heavy dialogs build their body when they are opened."""
+    main_qml = (PROJECT_ROOT / "qml" / "Main.qml").read_text()
+    assert "onOpened: updateDiff()" in main_qml, (
+        "diffDialog must compute the diff when it opens"
+    )
+    assert "onOpened: updatePreview()" in main_qml, (
+        "previewDialog must compute its content when it opens"
+    )

@@ -7,12 +7,6 @@ import org.kde.kirigami 2.20 as Kirigami
 Kirigami.AbstractCard {
     id: checkbox
 
-    // Fallback colors for PySide6 bundled Qt
-    function safeColor(role, fallback) {
-        var c = Kirigami.Theme[role]
-        return c && c.valid ? c : fallback
-    }
-
     Layout.fillWidth: true
     property string componentId: ""
     property string componentName: ""
@@ -25,33 +19,54 @@ Kirigami.AbstractCard {
     property bool isAvailable: false
     property bool glassMode: false
 
-    readonly property color fgColor: glassMode ? "#ffffff" : safeColor("textColor", "#1f1f1f")
-    readonly property color dimColor: glassMode ? Qt.rgba(1, 1, 1, 0.6) : Qt.rgba(0.15, 0.15, 0.15, 0.6)
-    readonly property color disabledColor: glassMode ? Qt.rgba(1, 1, 1, 0.45) : safeColor("disabledTextColor", "#888888")
-
     // Visual state
-    property color statusColor: {
+    readonly property color statusColor: {
         switch (componentStatus) {
-            case "available": return safeColor("positiveTextColor", "#27ae60")
-            case "partial": return safeColor("warningTextColor", "#f39c12")
-            case "not_installed": return safeColor("negativeTextColor", "#e74c3c")
+            case "available": return ThemeColors.positive()
+            case "partial": return ThemeColors.warning()
+            case "not_installed": return ThemeColors.negative()
         }
-        return dimColor
+        return ThemeColors.dimColor(glassMode)
     }
 
-    signal toggled(bool checked, string componentId)
+    // Present the status in the UI language. `componentStatusText` comes from the
+    // Python model, which returns its own (Russian) wording, so it is only used
+    // as a fallback for a status this component does not know.
+    readonly property string statusLabel: {
+        switch (componentStatus) {
+            case "available": return qsTr("Installed")
+            case "partial": return qsTr("Partial")
+            case "not_installed": return qsTr("Not installed")
+        }
+        return componentStatusText
+    }
+
+    // Named `componentToggled` because AbstractCard inherits ItemDelegate →
+    // AbstractButton, which already declares `toggled()` — re-declaring it
+    // is a fatal "duplicate signal name" error.
+    signal componentToggled(bool checked, string componentId)
 
     contentItem: RowLayout {
         spacing: Platform.Units.mediumSpacing
 
-        // Checkbox
-        Kirigami.CheckBox {
+        // Checkbox (Kirigami has no CheckBox type; QQC2's is what it would alias)
+        CheckBox {
+            id: box
             checked: checkbox.isSelected
+            // QQC2 writes to `checked` on toggle, which destroys the binding
+            // above. Re-arm it so the model stays authoritative.
+            Binding {
+                target: box
+                property: "checked"
+                value: checkbox.isSelected
+                restoreMode: Binding.RestoreBindingOrValue
+            }
             enabled: checkbox.isAvailable
-            onToggled: checkbox.toggled(checked, checkbox.componentId)
+            onToggled: checkbox.componentToggled(box.checked, checkbox.componentId)
+            Accessible.name: checkbox.componentName
             Layout.alignment: Qt.AlignVCenter
-            palette.windowText: checkbox.fgColor
-            palette.text: checkbox.fgColor
+            palette.windowText: ThemeColors.fgColor(checkbox.glassMode)
+            palette.text: ThemeColors.fgColor(checkbox.glassMode)
         }
 
         // Icon
@@ -59,7 +74,7 @@ Kirigami.AbstractCard {
             source: checkbox.componentIcon
             Layout.preferredWidth: Platform.Units.iconSizes.medium
             Layout.preferredHeight: Platform.Units.iconSizes.medium
-            color: checkbox.isAvailable ? checkbox.fgColor : checkbox.disabledColor
+            color: checkbox.isAvailable ? ThemeColors.fgColor(checkbox.glassMode) : ThemeColors.disabledColor(checkbox.glassMode)
             opacity: checkbox.isAvailable ? 1.0 : 0.5
         }
 
@@ -72,28 +87,28 @@ Kirigami.AbstractCard {
                 Label {
                     text: checkbox.componentName
                     font.bold: true
-                    color: checkbox.isAvailable ? checkbox.fgColor : checkbox.disabledColor
+                    color: checkbox.isAvailable ? ThemeColors.fgColor(checkbox.glassMode) : ThemeColors.disabledColor(checkbox.glassMode)
                 }
 
                 Label {
-                    text: checkbox.componentStatusText
-                    font.pointSize: Platform.Units.smallSpacing
+                    text: checkbox.statusLabel
+                    font.pointSize: TypeScale.caption
                     color: checkbox.statusColor
                     visible: !checkbox.isAvailable || checkbox.componentStatus === "partial"
                 }
 
                 Label {
                     text: qsTr("Live")
-                    font.pointSize: Platform.Units.smallSpacing
-                    color: checkbox.safeColor("highlightColor", "#2980b9")
+                    font.pointSize: TypeScale.caption
+                    color: ThemeColors.accent()
                     visible: checkbox.componentSupportsLiveReload && checkbox.isAvailable
                 }
             }
 
             Label {
                 text: checkbox.componentDescription
-                font.pointSize: Platform.Units.smallSpacing
-                color: checkbox.dimColor
+                font.pointSize: TypeScale.caption
+                color: ThemeColors.dimColor(checkbox.glassMode)
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
                 visible: checkbox.componentDescription !== ""
@@ -103,6 +118,6 @@ Kirigami.AbstractCard {
 
     background: Rectangle {
         radius: 4
-        color: checkbox.glassMode ? Qt.rgba(1, 1, 1, 0.06) : checkbox.safeColor("viewColor", "#ffffff")
+        color: ThemeColors.nestedBg(checkbox.glassMode)
     }
 }

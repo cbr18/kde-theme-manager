@@ -149,14 +149,19 @@ class SystemTrayController(QObject):
         _import_widgets()
         self._tray_menu = QMenu()
 
-        show_action = QAction("Показать", self._tray_menu)
+        show_action = QAction(
+            QCoreApplication.translate("SystemTray", "Show"), self._tray_menu
+        )
         show_action.triggered.connect(self._show_window)
         self._tray_menu.addAction(show_action)
 
-        # Быстрое переключение профилей
+        # Quick profile switching (placeholder: the entries are populated by the
+        # GUI once the profile list is available).
         self._tray_menu.addSeparator()
-        profiles_action = self._tray_menu.addAction("Профили")
-        profiles_action.setEnabled(False)  # Заголовок
+        profiles_action = self._tray_menu.addAction(
+            QCoreApplication.translate("SystemTray", "Profiles")
+        )
+        profiles_action.setEnabled(False)  # Section header
 
         self._tray_icon.setContextMenu(self._tray_menu)
 

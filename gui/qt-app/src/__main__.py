@@ -158,7 +158,10 @@ def main() -> int:
 
     main_controller.profile.activeProfileChanged.connect(sync_theme)
 
-    # Инициализация контроллеров ДО загрузки QML
+    # Инициализация контроллеров ДО загрузки QML.
+    # Python — единственный источник истины: initialize() идемпотентен
+    # (MainController._initialized), и QML НЕ должен повторно вызывать
+    # refresh()/load() из Component.onCompleted — это делается здесь.
     main_controller.initialize()
 
     qml_path = Path(__file__).parent.parent / "qml"
@@ -178,6 +181,7 @@ def main() -> int:
         return 1
 
     # Получить главное окно и зарегистрировать System Tray
+    # (требуется окно; QSystemTrayIcon создаётся ровно один раз)
     main_window = engine.rootObjects()[0]
     register_system_tray(engine, main_window)
 

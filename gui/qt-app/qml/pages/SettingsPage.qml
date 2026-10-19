@@ -1,109 +1,117 @@
 import QtQuick
-import org.kde.kirigami.platform as Platform
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami 2.20 as Kirigami
+import org.kde.kirigami.platform as Platform
+import Components 1.0
 
-Kirigami.Page {
+Kirigami.ScrollablePage {
     id: page
 
-    // Fallback colors for PySide6 bundled Qt
-    function safeColor(role, fallback) {
-        var c = Kirigami.Theme[role]
-        return c && c.valid ? c : fallback
-    }
     title: qsTr("Settings")
-    scrollable: true
 
+    readonly property bool glassMode: themeController.isGlass
+
+    background: Rectangle {
+        color: page.glassMode ? ThemeColors.glassPanel() : ThemeColors.pageBg(page.glassMode)
+    }
+
+    // Single top-level layout: ScrollablePage only anchors its child
+    // left/right, so everything must live inside a layout.
     ColumnLayout {
-        Layout.fillWidth: true
+        Layout.margins: Platform.Units.largeSpacing
         spacing: Platform.Units.largeSpacing
-        Layout.leftMargin: Platform.Units.largeSpacing
-        Layout.rightMargin: Platform.Units.largeSpacing
-        Layout.topMargin: Platform.Units.largeSpacing
-        Layout.bottomMargin: Platform.Units.largeSpacing
 
         // ─── Profile Apply Mode ───
         Kirigami.Card {
             Layout.fillWidth: true
 
-            ColumnLayout {
-                Layout.fillWidth: true
+            background: Rectangle {
+                radius: Platform.Units.smallSpacing
+                border.width: 1
+                color: ThemeColors.cardBg(page.glassMode)
+                border.color: ThemeColors.cardBorder(page.glassMode)
+            }
+
+            contentItem: ColumnLayout {
                 spacing: Platform.Units.mediumSpacing
 
                 Kirigami.Heading {
                     level: 2
                     text: qsTr("Profile Apply Mode")
+                    color: ThemeColors.fgColor(page.glassMode)
                 }
 
                 Kirigami.FormLayout {
                     Layout.fillWidth: true
 
-                    Kirigami.FormData.label: qsTr("Mode")
-                    Kirigami.FormData.isRequired: true
-
                     RowLayout {
+                        Kirigami.FormData.label: qsTr("Mode")
                         spacing: Platform.Units.mediumSpacing
 
-                        Kirigami.RadioButton {
+                        RadioButton {
                             id: modeAll
                             text: qsTr("Apply ALL components (default)")
-                            checked: settingsController.defaultComponentsMode === "all"
-                            onToggled: if (checked) settingsController.defaultComponentsMode = "all"
+                            autoExclusive: true
                             hoverEnabled: true
                             ToolTip.text: qsTr("Apply all tracked components when switching profiles")
                             ToolTip.visible: hovered
+                            onClicked: if (checked) settingsController.defaultComponentsMode = "all"
+                            Binding {
+                                target: modeAll
+                                property: "checked"
+                                value: settingsController.defaultComponentsMode === "all"
+                                restoreMode: Binding.RestoreBindingOrValue
+                            }
                         }
 
-                        Kirigami.RadioButton {
+                        RadioButton {
                             id: modeCustom
                             text: qsTr("Apply SELECTED components only")
-                            checked: settingsController.defaultComponentsMode === "custom"
-                            onToggled: if (checked) settingsController.defaultComponentsMode = "custom"
+                            autoExclusive: true
                             hoverEnabled: true
                             ToolTip.text: qsTr("Choose which components to apply per profile")
                             ToolTip.visible: hovered
+                            onClicked: if (checked) settingsController.defaultComponentsMode = "custom"
+                            Binding {
+                                target: modeCustom
+                                property: "checked"
+                                value: settingsController.defaultComponentsMode === "custom"
+                                restoreMode: Binding.RestoreBindingOrValue
+                            }
                         }
                     }
                 }
 
                 // Custom components selection (visible when custom mode)
-                Item {
+                ColumnLayout {
                     Layout.fillWidth: true
+                    spacing: Platform.Units.mediumSpacing
                     visible: settingsController.defaultComponentsMode === "custom"
-                    height: customComponentsView.height
 
-                    Kirigami.Separator {}
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
+                        color: ThemeColors.subtleBorder(page.glassMode)
+                    }
 
                     Label {
-                        text: qsTr("Select components to include when applying/saving profiles:")
-                        font.pointSize: Platform.Units.smallSpacing
-                        color: safeColor("textColor", "#1f1f1f")
-                        opacity: 0.7
-                        wrapMode: Text.WordWrap
                         Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("Select components to include when applying/saving profiles:")
+                        font.pointSize: TypeScale.caption
+                        color: ThemeColors.dimColor(page.glassMode)
                     }
 
                     // Component checkboxes grouped by category
-                    ColumnLayout {
-                        id: customComponentsView
-                        Layout.fillWidth: true
-                        spacing: Platform.Units.mediumSpacing
-
-                        Repeater {
-                            id: categoryRepeater
-                            model: trackedAppsController.categories
-                            delegate: ComponentCategoryGroup {
-                                category: modelData
-                                selectedComponents: settingsController.customComponents
-                                availableComponents: settingsController.availableComponents
-                                onSelectionChanged: {
-                                    // selectedComponents on this group was updated to the local
-                                    // _localSelection (which mirrors the full selection set),
-                                    // so propagate it back to the SettingsController.
-                                    settingsController.customComponents = selectedComponents.slice()
-                                }
-                            }
+                    Repeater {
+                        model: trackedAppsController.categories
+                        delegate: ComponentCategoryGroup {
+                            category: modelData
+                            selectedComponents: settingsController.customComponents
+                            availableComponents: settingsController.availableComponents
+                            glassMode: page.glassMode
+                            onSelectionChanged: (components) => settingsController.customComponents = components
                         }
                     }
                 }
@@ -114,42 +122,54 @@ Kirigami.Page {
         Kirigami.Card {
             Layout.fillWidth: true
 
-            ColumnLayout {
-                Layout.fillWidth: true
+            background: Rectangle {
+                radius: Platform.Units.smallSpacing
+                border.width: 1
+                color: ThemeColors.cardBg(page.glassMode)
+                border.color: ThemeColors.cardBorder(page.glassMode)
+            }
+
+            contentItem: ColumnLayout {
                 spacing: Platform.Units.mediumSpacing
 
                 Kirigami.Heading {
                     level: 2
                     text: qsTr("Wallpaper")
+                    color: ThemeColors.fgColor(page.glassMode)
                 }
 
                 Kirigami.FormLayout {
                     Layout.fillWidth: true
 
-                    Kirigami.FormData.label: qsTr("Link wallpaper to profile")
-                    Kirigami.FormData.isRequired: false
-
-                    Kirigami.Switch {
-                        checked: settingsController.wallpaperLinkedToProfile
+                    Switch {
+                        id: wallpaperLinkedSwitch
+                        text: qsTr("Link wallpaper to profile")
                         onToggled: settingsController.wallpaperLinkedToProfile = checked
+                        Binding {
+                            target: wallpaperLinkedSwitch
+                            property: "checked"
+                            value: settingsController.wallpaperLinkedToProfile
+                            restoreMode: Binding.RestoreBindingOrValue
+                        }
                     }
 
-                    Kirigami.FormData.label: qsTr("Wallpaper directory")
-                    Kirigami.FormData.isRequired: true
-
                     RowLayout {
+                        Kirigami.FormData.label: qsTr("Wallpaper directory")
+
                         TextField {
                             Layout.fillWidth: true
                             text: settingsController.wallpaperDirectory
                             placeholderText: "~/Изображения/Wallpaper"
                             onEditingFinished: settingsController.wallpaperDirectory = text
                         }
-                        Kirigami.Button {
+                        Button {
                             icon.name: "folder-open"
                             flat: true
-                            onClicked: {
-                                // TODO: open folder dialog
-                            }
+                            enabled: false
+                            hoverEnabled: true
+                            Accessible.name: qsTr("Choose wallpaper directory")
+                            ToolTip.text: qsTr("Not implemented yet")
+                            ToolTip.visible: hovered
                         }
                     }
                 }
@@ -160,25 +180,37 @@ Kirigami.Page {
         Kirigami.Card {
             Layout.fillWidth: true
 
-            ColumnLayout {
-                Layout.fillWidth: true
+            background: Rectangle {
+                radius: Platform.Units.smallSpacing
+                border.width: 1
+                color: ThemeColors.cardBg(page.glassMode)
+                border.color: ThemeColors.cardBorder(page.glassMode)
+            }
+
+            contentItem: ColumnLayout {
                 spacing: Platform.Units.mediumSpacing
 
                 Kirigami.Heading {
                     level: 2
                     text: qsTr("Appearance")
+                    color: ThemeColors.fgColor(page.glassMode)
                 }
 
                 Kirigami.FormLayout {
                     Layout.fillWidth: true
 
-                    Kirigami.FormData.label: qsTr("Application theme")
-
                     ComboBox {
+                        id: themeCombo
                         Layout.fillWidth: true
+                        Kirigami.FormData.label: qsTr("Application theme")
                         model: ["system", "glass", "paper", "dark", "light"]
-                        currentText: settingsController.theme
-                        onCurrentTextChanged: settingsController.theme = currentText
+                        onActivated: settingsController.theme = currentText
+                        Binding {
+                            target: themeCombo
+                            property: "currentIndex"
+                            value: themeCombo.model.indexOf(settingsController.theme)
+                            restoreMode: Binding.RestoreBindingOrValue
+                        }
                     }
                 }
             }
@@ -188,56 +220,91 @@ Kirigami.Page {
         Kirigami.Card {
             Layout.fillWidth: true
 
-            ColumnLayout {
-                Layout.fillWidth: true
+            background: Rectangle {
+                radius: Platform.Units.smallSpacing
+                border.width: 1
+                color: ThemeColors.cardBg(page.glassMode)
+                border.color: ThemeColors.cardBorder(page.glassMode)
+            }
+
+            contentItem: ColumnLayout {
                 spacing: Platform.Units.mediumSpacing
 
                 Kirigami.Heading {
                     level: 2
                     text: qsTr("Behavior")
+                    color: ThemeColors.fgColor(page.glassMode)
                 }
 
                 Kirigami.FormLayout {
                     Layout.fillWidth: true
 
-                    Kirigami.FormData.label: qsTr("Show warning for not installed apps")
-                    Kirigami.Switch {
-                        checked: settingsController.showNotInstalledWarning
+                    Switch {
+                        id: notInstalledSwitch
+                        Kirigami.FormData.label: qsTr("Show warning for not installed apps")
                         onToggled: settingsController.showNotInstalledWarning = checked
-                    }
-
-                    Kirigami.FormData.label: qsTr("Auto-apply last profile on startup")
-                    Kirigami.Switch {
-                        checked: settingsController.autoApplyOnStartup
-                        onToggled: settingsController.autoApplyOnStartup = checked
-                    }
-
-                    Kirigami.FormData.label: qsTr("Minimize to system tray")
-                    Kirigami.Switch {
-                        checked: settingsController.minimizeToTray
-                        onToggled: settingsController.minimizeToTray = checked
-                    }
-
-                    Kirigami.FormData.label: qsTr("Confirm before applying profile")
-                    Kirigami.Switch {
-                        checked: settingsController.confirmBeforeApply
-                        onToggled: settingsController.confirmBeforeApply = checked
-                    }
-
-                    Kirigami.FormData.label: qsTr("Create backup before applying")
-                    Kirigami.Switch {
-                        checked: settingsController.createBackupBeforeApply
-                        onToggled: settingsController.createBackupBeforeApply = checked
-                    }
-
-                    Kirigami.FormData.label: qsTr("Global hotkey")
-                    RowLayout {
-                        TextField {
-                            Layout.fillWidth: true
-                            text: settingsController.globalHotkey
-                            placeholderText: "Meta+T"
-                            onEditingFinished: settingsController.globalHotkey = text
+                        Binding {
+                            target: notInstalledSwitch
+                            property: "checked"
+                            value: settingsController.showNotInstalledWarning
+                            restoreMode: Binding.RestoreBindingOrValue
                         }
+                    }
+
+                    Switch {
+                        id: autoApplySwitch
+                        Kirigami.FormData.label: qsTr("Auto-apply last profile on startup")
+                        onToggled: settingsController.autoApplyOnStartup = checked
+                        Binding {
+                            target: autoApplySwitch
+                            property: "checked"
+                            value: settingsController.autoApplyOnStartup
+                            restoreMode: Binding.RestoreBindingOrValue
+                        }
+                    }
+
+                    Switch {
+                        id: minimizeSwitch
+                        Kirigami.FormData.label: qsTr("Minimize to system tray")
+                        onToggled: settingsController.minimizeToTray = checked
+                        Binding {
+                            target: minimizeSwitch
+                            property: "checked"
+                            value: settingsController.minimizeToTray
+                            restoreMode: Binding.RestoreBindingOrValue
+                        }
+                    }
+
+                    Switch {
+                        id: confirmSwitch
+                        Kirigami.FormData.label: qsTr("Confirm before applying profile")
+                        onToggled: settingsController.confirmBeforeApply = checked
+                        Binding {
+                            target: confirmSwitch
+                            property: "checked"
+                            value: settingsController.confirmBeforeApply
+                            restoreMode: Binding.RestoreBindingOrValue
+                        }
+                    }
+
+                    Switch {
+                        id: backupSwitch
+                        Kirigami.FormData.label: qsTr("Create backup before applying")
+                        onToggled: settingsController.createBackupBeforeApply = checked
+                        Binding {
+                            target: backupSwitch
+                            property: "checked"
+                            value: settingsController.createBackupBeforeApply
+                            restoreMode: Binding.RestoreBindingOrValue
+                        }
+                    }
+
+                    TextField {
+                        Kirigami.FormData.label: qsTr("Global hotkey")
+                        Layout.fillWidth: true
+                        text: settingsController.globalHotkey
+                        placeholderText: "Meta+T"
+                        onEditingFinished: settingsController.globalHotkey = text
                     }
                 }
             }
@@ -247,10 +314,17 @@ Kirigami.Page {
         Kirigami.Card {
             Layout.fillWidth: true
 
-            RowLayout {
+            background: Rectangle {
+                radius: Platform.Units.smallSpacing
+                border.width: 1
+                color: ThemeColors.cardBg(page.glassMode)
+                border.color: ThemeColors.cardBorder(page.glassMode)
+            }
+
+            contentItem: RowLayout {
                 spacing: Platform.Units.mediumSpacing
 
-                Kirigami.Button {
+                Button {
                     Layout.fillWidth: true
                     text: qsTr("Save Settings")
                     icon.name: "document-save"
@@ -258,7 +332,7 @@ Kirigami.Page {
                     onClicked: settingsController.save()
                 }
 
-                Kirigami.Button {
+                Button {
                     Layout.fillWidth: true
                     text: qsTr("Reset to Defaults")
                     icon.name: "view-refresh"

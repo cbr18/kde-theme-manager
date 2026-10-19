@@ -7,16 +7,10 @@ import org.kde.kirigami 2.20 as Kirigami
 Kirigami.Card {
     id: group
 
-    // Fallback colors for PySide6 bundled Qt
-    function safeColor(role, fallback) {
-        var c = Kirigami.Theme[role]
-        return c && c.valid ? c : fallback
-    }
-
     function categoryIcon(cat) {
         const icons = {
             "KDE / Plasma": "plasma",
-            "GTK / Qt": "preferences-desktop-theme-gtk",
+            "GTK / Qt": "gtk-preferences",
             "Window Decorations": "preferences-system-windows",
             "Terminals": "utilities-terminal",
             "Launchers / Menu": "system-run",
@@ -24,7 +18,7 @@ Kirigami.Card {
             "Sysinfo": "preferences-desktop-theme",
             "Editors": "text-editor",
             "Browser": "web-browser",
-            "Notes": "x-office-note",
+            "Notes": "x-office-document",
             "System Profiles": "preferences-desktop-theme"
         }
         return icons[cat] || "application-x-executable"
@@ -32,17 +26,18 @@ Kirigami.Card {
 
     Layout.fillWidth: true
     property string category: ""
+    // Input: the app-wide selection (bound by the parent). Never write to this.
     property var selectedComponents: []
     property var availableComponents: []
     property bool glassMode: false
     property bool expanded: true
 
-    readonly property color fgColor: glassMode ? "#ffffff" : safeColor("textColor", "#1f1f1f")
-
     // Local selection state (mirrors selectedComponents but mutable)
     property var _localSelection: []
 
-    signal selectionChanged()
+    // Carries the new full selection; the parent propagates it to the controller
+    // (e.g. settingsController.customComponents = components).
+    signal selectionChanged(var components)
 
     onSelectedComponentsChanged: _localSelection = selectedComponents.slice()
     Component.onCompleted: _localSelection = selectedComponents.slice()
@@ -58,71 +53,95 @@ Kirigami.Card {
                 source: group.categoryIcon(group.category)
                 Layout.preferredWidth: Platform.Units.iconSizes.medium
                 Layout.preferredHeight: Platform.Units.iconSizes.medium
-                color: group.safeColor("highlightColor", "#2980b9")
+                color: ThemeColors.accent()
             }
 
             Kirigami.Heading {
                 level: 3
                 text: group.category
-                color: group.fgColor
+                color: ThemeColors.fgColor(group.glassMode)
             }
 
             Item { Layout.fillWidth: true }
 
-            Kirigami.ToolButton {
-                icon.source: group.expanded ? "go-up" : "go-down"
+            Button {
+                id: expandButton
+                flat: true
+                readonly property string actionLabel: group.expanded ? qsTr("Collapse") : qsTr("Expand")
+                icon.name: group.expanded ? "go-up" : "go-down"
+                Accessible.name: actionLabel
+                ToolTip.text: actionLabel
+                ToolTip.visible: hovered
                 onClicked: group.expanded = !group.expanded
             }
         }
 
-        Kirigami.Separator {}
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            color: ThemeColors.subtleBorder(group.glassMode)
+        }
 
         // Components list (collapsible)
         ColumnLayout {
             id: componentsLayout
             Layout.fillWidth: true
+            clip: true
             spacing: Platform.Units.smallSpacing
-            visible: group.expanded
-            height: group.expanded ? implicitHeight : 0
+            Layout.preferredHeight: group.expanded ? implicitHeight : 0
+            // Keep it visible while it collapses as well, so the animation is
+            // actually painted (a pure `Layout.preferredHeight > 0` test can
+            // deadlock against the implicitHeight the layout computes).
+            visible: group.expanded || Layout.preferredHeight > 0
+
+            Behavior on Layout.preferredHeight {
+                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+            }
 
             Repeater {
-                model: mainController.tracked_apps.getComponentsByCategory(group.category)
+                model: {
+                    // Establishes a dependency on the async registry refresh
+                    // so the model re-evaluates once components are loaded.
+                    var _revision = trackedAppsController.componentsRevision
+                    return trackedAppsController.getComponentsByCategory(group.category)
+                }
                 delegate: ComponentCheckbox {
                     glassMode: group.glassMode
-                    componentId: model.id
-                    componentName: model.name
-                    componentStatus: model.status
-                    componentStatusText: model.statusText
-                    componentDescription: model.description
-                    componentIcon: model.icon
-                    componentSupportsLiveReload: model.supportsLiveReload
-                    isSelected: group._localSelection.indexOf(model.id) !== -1
-                    isAvailable: group.availableComponents.indexOf(model.id) !== -1
-                    onToggled: {
-                        var idx = group._localSelection.indexOf(componentId)
+                    // `getComponentsByCategory()` returns a list of maps, which
+                    // Qt 6.12 only exposes via `modelData` (not `model.<key>`).
+                    componentId: modelData.id
+                    componentName: modelData.name
+                    componentStatus: modelData.status
+                    componentStatusText: modelData.statusText
+                    componentDescription: modelData.description
+                    componentIcon: modelData.icon
+                    componentSupportsLiveReload: modelData.supportsLiveReload
+                    isSelected: group._localSelection.indexOf(modelData.id) !== -1
+                    isAvailable: group.availableComponents.indexOf(modelData.id) !== -1
+                    onComponentToggled: function(checked, componentId) {
+                        var next = group._localSelection.slice()
+                        var idx = next.indexOf(componentId)
                         if (checked && idx === -1) {
-                            group._localSelection.push(componentId)
+                            next.push(componentId)
                         } else if (!checked && idx !== -1) {
-                            group._localSelection.splice(idx, 1)
+                            next.splice(idx, 1)
                         }
-                        group.selectedComponents = group._localSelection.slice()
-                        group.selectionChanged()
+                        // Reassign instead of mutating in place: an in-place
+                        // array mutation does not notify, so the delegates'
+                        // `isSelected` bindings (and therefore their checked
+                        // state) would never re-evaluate.
+                        group._localSelection = next
+                        group.selectionChanged(next.slice())
                     }
                 }
             }
-        }
-
-        Behavior on componentsLayout.height {
-            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
         }
     }
 
     background: Rectangle {
         radius: 6
         border.width: 1
-        color: group.glassMode ? Qt.rgba(1, 1, 1, 0.08) : group.safeColor("viewColor", "#ffffff")
-        border.color: group.glassMode
-            ? Qt.rgba(1, 1, 1, 0.18)
-            : Qt.rgba(0.15, 0.15, 0.15, 0.18)
+        color: ThemeColors.cardBg(group.glassMode)
+        border.color: ThemeColors.cardBorder(group.glassMode)
     }
 }

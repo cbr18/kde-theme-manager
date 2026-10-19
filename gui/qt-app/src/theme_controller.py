@@ -72,7 +72,7 @@ class ThemeController(QObject):
 
     @Slot()
     def _apply_theme(self) -> None:
-        """Применить тему к приложению."""
+        """Применить тему к приложению (ровно один проход, без двойных emit)."""
         effective_theme = self._resolve_theme()
 
         if effective_theme == "glass":
@@ -85,6 +85,40 @@ class ThemeController(QObject):
             self._apply_light_theme()
         else:  # system
             self._apply_system_theme()
+
+    def _apply_flags(self, glass: bool, dark: bool) -> None:
+        """Единственная точка применения: флаги + палитра + сигналы/эффекты.
+
+        Каждый _apply_*_theme helper делегирует сюда, поэтому палитра
+        применяется один раз, а сигналы эмитятся только при реальном
+        изменении значения.
+        """
+        previous_glass = self._is_glass
+        previous_blur = self._blur_enabled
+
+        self._is_glass = glass
+        self._blur_enabled = glass
+
+        if dark:
+            self._apply_palette(dark=True)
+        else:
+            self._apply_palette(dark=False)
+
+        if previous_glass != glass:
+            self.glassEffectChanged.emit(glass)
+        if previous_blur != self._blur_enabled:
+            self.windowBlurChanged.emit(self._blur_enabled)
+
+        if glass:
+            if self._window:
+                self._enable_window_blur()
+        else:
+            self._disable_window_blur()
+
+    def _system_is_dark(self) -> bool:
+        """Detected system color scheme (True = dark)."""
+        hints = QGuiApplication.styleHints()
+        return hints is not None and hints.colorScheme() == Qt.ColorMode.Dark
 
     def _resolve_theme(self) -> str:
         """Разрешить тему с учётом системной."""
@@ -161,14 +195,7 @@ class ThemeController(QObject):
 
     def _apply_glass_theme(self) -> None:
         """Glass theme: прозрачность окна + KWin blur + тёмная палитра."""
-        self._is_glass = True
-        self._blur_enabled = True
-        self._apply_palette(dark=True)
-        self.glassEffectChanged.emit(True)
-        self.windowBlurChanged.emit(True)
-
-        if self._window:
-            self._enable_window_blur()
+        self._apply_flags(glass=True, dark=True)
 
     def _enable_window_blur(self) -> None:
         """Request KWin blur for the (translucent) window.
@@ -196,12 +223,7 @@ class ThemeController(QObject):
 
     def _apply_paper_theme(self) -> None:
         """Paper theme: светлая, без прозрачности."""
-        self._is_glass = False
-        self._blur_enabled = False
-        self.glassEffectChanged.emit(False)
-        self.windowBlurChanged.emit(False)
-        self._disable_window_blur()
-        self._apply_light_theme()
+        self._apply_flags(glass=False, dark=False)
 
     def _disable_window_blur(self) -> None:
         """No-op: window transparency is fully driven by QML (see above)."""
@@ -209,34 +231,15 @@ class ThemeController(QObject):
 
     def _apply_dark_theme(self) -> None:
         """Тёмная тема."""
-        self._is_glass = False
-        self._blur_enabled = False
-        self.glassEffectChanged.emit(False)
-        self.windowBlurChanged.emit(False)
-        self._disable_window_blur()
-        self._apply_palette(dark=True)
+        self._apply_flags(glass=False, dark=True)
 
     def _apply_light_theme(self) -> None:
         """Светлая тема."""
-        self._is_glass = False
-        self._blur_enabled = False
-        self.glassEffectChanged.emit(False)
-        self.windowBlurChanged.emit(False)
-        self._disable_window_blur()
-        self._apply_palette(dark=False)
+        self._apply_flags(glass=False, dark=False)
 
     def _apply_system_theme(self) -> None:
         """Системная тема (follow system)."""
-        self._is_glass = False
-        self._blur_enabled = False
-        self.glassEffectChanged.emit(False)
-        self.windowBlurChanged.emit(False)
-        self._disable_window_blur()
-
-        from PySide6.QtGui import QGuiApplication as _QGui
-        hints = _QGui.styleHints()
-        dark = hints is not None and hints.colorScheme() == Qt.ColorMode.Dark
-        self._apply_palette(dark=dark)
+        self._apply_flags(glass=False, dark=self._system_is_dark())
 
     @Slot(str)
     def sync_with_active_profile(self, profile_name: str) -> None:

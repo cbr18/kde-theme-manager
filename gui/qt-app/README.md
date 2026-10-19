@@ -9,9 +9,13 @@ Native KDE Plasma application for managing theme profiles and wallpapers.
 - **Select, then Apply** — clicking a profile only *selects* it; an explicit
   **Apply** button commits it (switching profiles is slow, so nothing happens
   until you ask for it)
+- **Preview & Diff** — see exactly which components a profile carries and how it
+  differs from the active one *before* applying
 - **Granular Control** — Choose which components to apply per profile
+  (*Settings* page in the global drawer)
 - **Wallpaper Management** — Picker with previews, next/prev navigation
 - **App Detection** — Automatically detects installed/configured apps
+- **Non-blocking** — apply/save/delete run off the GUI thread with a busy state
 - **Dogfooding** — App themes itself from the *active* profile
 - **Clean Architecture** — Core protocol ready for Rust rewrite
 
@@ -34,10 +38,39 @@ Implementation notes:
 - `Kirigami.Page` paints `Platform.Theme.backgroundColor` behind its content;
   `Main.qml` overrides the page `background` so glass mode shows the translucent
   glass panel instead of an opaque light rectangle.
-- `Kirigami.Theme` colour roles can be invalid with PySide6's bundled Qt, so every
-  QML file defines a `safeColor(role, fallback)` helper.
+- **All colours live in one place**: `qml/Components/ThemeColors.qml`, a QML
+  singleton of `glass`-parameterised accessors (`ThemeColors.cardBg(glassMode)`,
+  `ThemeColors.fgColor(glassMode)`, …). It is the only file allowed to read
+  `Kirigami.Theme` directly — those colour roles can be *invalid* with PySide6's
+  bundled Qt, which is why it wraps every lookup in `safeColor(role, fallback)`.
+  Previously every component copy-pasted that helper and the palettes drifted
+  apart.
+- **All font sizes come from** `qml/Components/TypeScale.qml` (also a singleton:
+  `body`, `subtitle`, `title`, `caption`, derived from the platform font).
+  Never bind `font.pointSize` to `Platform.Units.*Spacing` — those are spacing
+  tokens (4 pt / 6 pt here) and rendered body text near-illegible.
 - Window transparency is owned by QML (`color:` binding) — the Python side must
   **not** call `QWindow.setColor()`, as that overrides the QML binding.
+- The global drawer is `modal: true` (the default). A non-modal `GlobalDrawer` is
+  a *permanent* sidebar on desktop, which eats ~220 px and overlaps the header.
+
+## Select, then Apply
+
+Switching a profile runs `theme-profile apply`, which touches dozens of config
+files and takes seconds. Two consequences shape the UI:
+
+- Clicking a profile card (or its radio button, or pressing Space while it has
+  focus) only sets `selectedProfile`. Nothing is written until the **Apply**
+  button is pressed, and the button is disabled while the selection already
+  matches the active profile.
+- Apply/save/delete run on a `QThreadPool` worker (`ProfileController.busy`,
+  `operationStarted` / `operationFinished`), so the window keeps repainting and
+  the busy indicator animates while the work happens. The result is shown in an
+  inline message that auto-clears after a few seconds.
+- The radio/check-box `checked` state is model-driven. A Qt Quick control writes
+  to `checked` on click, which destroys a plain `checked:` binding, so both
+  components re-arm it with
+  `Binding { restoreMode: Binding.RestoreBindingOrValue }`.
 
 ## Screenshots
 
@@ -56,7 +89,7 @@ Implementation notes:
 
 ```bash
 # From theme-profile-kit root
-cd qt-app
+cd gui/qt-app
 uv pip install -e ".[dev]"  # or pip install -e ".[dev]"
 
 # Or install system-wide (requires PySide6)
@@ -67,22 +100,40 @@ pip install -e .
 
 ```bash
 # Run from source
-cd qt-app
+cd gui/qt-app
 python -m src
 
 # Run with uv
 uv run python -m src
 
-# Lint
+# Lint (ruff/mypy come from the [dev] extra)
 ruff check src/
 mypy src/
 
-# Tests
-pytest
+# QML syntax/type lint (PySide6 6.12 ships its own qmllint)
+.venv/bin/pyside6-qmllint -I qml -I /usr/lib/qt6/qml qml/Main.qml qml/pages/SettingsPage.qml qml/Components/*.qml
+
+# Tests (Python: 67, from gui/qt-app)
+.venv/bin/python -m pytest tests/ -q
+
+# Tests (bash tooling: 33, from the repo root)
+bash tests/test-scripts.sh
+
+# Static shell analysis (repo root)
+find . -name "*.sh" -not -path "*/.venv/*" -print0 | xargs -0 shellcheck -x
 
 # Visual smoke test: render the window to a PNG and exit (dev helper)
 KTM_SCREENSHOT=/tmp/win.png python -m src
 ```
+
+Known, harmless `qmllint` output:
+
+- `Unqualified access [unqualified]` for `profileController`, `themeController`,
+  `settingsController`, `trackedAppsController` — they are context properties, so
+  qmllint cannot resolve them. Expected.
+- `Type ThemeColors/TypeScale not declared as singleton in qmldir but using pragma
+  Singleton [import]` — only emitted when the singleton file itself is passed on
+  the command line; the `qmldir` does declare both and the runtime resolves them.
 
 ## Architecture
 
@@ -102,10 +153,12 @@ src/
 └── __main__.py           # Entry point
 
 qml/
-├── Main.qml              # Main page (active profile, profiles, wallpaper)
+├── Main.qml              # Main page (active profile, profiles, wallpaper) + dialogs
 ├── pages/
-│   └── SettingsPage.qml  # Settings with component toggles
+│   └── SettingsPage.qml  # Settings with component toggles (drawer → Settings)
 └── Components/
+    ├── ThemeColors.qml              # Singleton: the only colour source
+    ├── TypeScale.qml                # Singleton: typography scale
     ├── ProfileCardDelegate.qml      # Available-profile card
     ├── ProfileRadioButton.qml       # Active-profile select card
     ├── ComponentCategoryGroup.qml   # Collapsible component category
@@ -114,6 +167,13 @@ qml/
 
 > Note: `ScrollablePage` must contain a **single layout** child — its children are
 > only anchored left/right, never laid out, so bare cards collapse to zero height.
+> `Kirigami.Card` needs an explicit `contentItem:` for the same reason.
+
+> Note: a `@Slot()` in `src/controllers/__init__.py` must declare **every**
+> argument type. `@Slot(str, result=str) def diff_profiles(a, b)` makes Qt drop
+> the second argument silently, and the call raises `missing 1 required positional
+> argument` at runtime. `tests/test_gui.py::test_slots_declare_every_python_argument`
+> guards this for every controller.
 
 ## Core Protocol (Replaceable)
 
@@ -184,9 +244,10 @@ cargo build --release
 
 ## Roadmap
 
-- [ ] System tray integration
+- [x] Profile preview before apply (Preview / Diff dialogs)
+- [ ] System tray: quick profile switching (icon + show/hide exists; the
+      "Profiles" submenu is still a placeholder)
 - [ ] Global hotkey (Meta+T)
-- [ ] Profile preview before apply
 - [ ] Auto-sync with system theme changes
 - [ ] Rust core implementation
 - [ ] Plasma applet version

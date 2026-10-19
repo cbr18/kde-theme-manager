@@ -14,58 +14,96 @@ Kirigami.ApplicationWindow {
     minimumWidth: 640
     minimumHeight: 480
 
-    // ──────────────────────────────────────────────────────────────
-    // Helpers
-    // ──────────────────────────────────────────────────────────────
-    // Kirigami.Theme colors can be invalid with PySide6's bundled Qt
-    // combined with the system Kirigami plugin → always keep a fallback.
-    function safeColor(role, fallback) {
-        var c = Kirigami.Theme[role]
-        return (c && c.valid) ? c : fallback
-    }
-
     // Dogfooding: follow the active profile (glass → translucent).
     readonly property bool glassMode: themeController.isGlass
 
-    readonly property color cardBg: glassMode
-        ? Qt.rgba(1, 1, 1, 0.09)
-        : safeColor("viewColor", "#ffffff")
-    // Borders are derived from the foreground with a low alpha so they stay
-    // visible in both themes (Kirigami's viewColor is always white here).
-    readonly property color cardBorder: glassMode
-        ? Qt.rgba(1, 1, 1, 0.18)
-        : Qt.rgba(0.15, 0.15, 0.15, 0.18)
-    readonly property color fgColor: glassMode
-        ? "#ffffff"
-        : safeColor("textColor", "#1f1f1f")
-    readonly property color dimColor: glassMode
-        ? Qt.rgba(1, 1, 1, 0.80)
-        : Qt.rgba(0.15, 0.15, 0.15, 0.65)
+    // True while the controller is applying/saving/deleting a profile.
+    readonly property bool applying: profileController.busy
 
     // The window surface itself stays transparent in glass mode: the page
     // paints the translucent glass panel on top (see mainPage.background).
-    color: glassMode ? "transparent" : safeColor("backgroundColor", "#eff0f3")
+    color: ThemeColors.windowBg(root.glassMode)
 
     // Profile the user picked in the UI. Applying is explicit (Apply button)
     // because switching profiles is expensive — the user may want to look
     // around before committing.
     property string selectedProfile: ""
 
+    // Last active profile we observed. Used to distinguish "the user changed
+    // the selection" from "the controller just refreshed the active profile".
+    property string _lastActive: ""
+
+    // Transient feedback for the last controller operation.
+    property string operationMessage: ""
+    property bool _operationSucceeded: true
+
+    Timer {
+        id: messageTimer
+        interval: 6000
+        onTriggered: root.operationMessage = ""
+    }
+
+    // Track real active-profile changes without clobbering a user's in-progress
+    // selection. The initial value is seeded in Component.onCompleted because
+    // activeProfileChanged already fired during MainController.initialize().
     Connections {
         target: profileController
         function onActiveProfileChanged() {
-            if (root.selectedProfile === "") {
-                root.selectedProfile = profileController.activeProfile
+            var active = profileController.activeProfile
+            if (root.selectedProfile === "" || root.selectedProfile === root._lastActive) {
+                root.selectedProfile = active
             }
+            root._lastActive = active
+        }
+    }
+
+    Connections {
+        target: profileController
+        function onOperationStarted(op) {
+            if (op === "apply")
+                root.operationMessage = qsTr("Applying profile…")
+            else if (op === "save")
+                root.operationMessage = qsTr("Saving profile…")
+            else if (op === "delete")
+                root.operationMessage = qsTr("Deleting profile…")
+            else
+                root.operationMessage = qsTr("Working…")
+        }
+        function onOperationFinished(success, message) {
+            root._operationSucceeded = success
+            root.operationMessage = message
+            messageTimer.restart()
         }
     }
 
     Component.onCompleted: {
+        // The Python side (main_controller.initialize()) already loaded every
+        // controller before engine.load(), so we only need to hand the window
+        // to the theme controller and seed the selection.
         themeController.set_window(root)
-        profileController.refresh()
-        wallpaperController.refresh()
-        trackedAppsController.refresh()
-        settingsController.load()
+        root._lastActive = profileController.activeProfile
+        root.selectedProfile = profileController.activeProfile
+    }
+
+    globalDrawer: Kirigami.GlobalDrawer {
+        title: qsTr("Theme Profile Manager")
+        titleIcon: "preferences-desktop-theme"
+        // modal (the default) keeps the drawer behind the hamburger button.
+        // A non-modal GlobalDrawer is a *permanent* sidebar on desktop, which
+        // eats ~220 px of width and overlaps the page header.
+        modal: true
+        actions: [
+            Kirigami.Action {
+                text: qsTr("Profiles")
+                icon.name: "preferences-desktop-theme"
+                onTriggered: pageStack.layers.clear()
+            },
+            Kirigami.Action {
+                text: qsTr("Settings")
+                icon.name: "settings-configure"
+                onTriggered: pageStack.layers.push(Qt.resolvedUrl("pages/SettingsPage.qml"))
+            }
+        ]
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -83,8 +121,8 @@ Kirigami.ApplicationWindow {
         // the compositor applies blur/alpha to the surface.
         background: Rectangle {
             color: root.glassMode
-                ? Qt.rgba(0.09, 0.10, 0.12, 0.72)
-                : root.safeColor("backgroundColor", "#eff0f3")
+                ? ThemeColors.glassPanel()
+                : ThemeColors.pageBg(root.glassMode)
         }
 
         ColumnLayout {
@@ -96,10 +134,10 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
 
                 background: Rectangle {
-                    color: root.cardBg
+                    color: ThemeColors.cardBg(root.glassMode)
                     radius: Platform.Units.smallSpacing
                     border.width: 1
-                    border.color: root.cardBorder
+                    border.color: ThemeColors.cardBorder(root.glassMode)
                 }
 
                 contentItem: ColumnLayout {
@@ -111,19 +149,25 @@ Kirigami.ApplicationWindow {
                         Kirigami.Heading {
                             level: 2
                             text: qsTr("Active Profile")
-                            color: root.fgColor
+                            color: ThemeColors.fgColor(root.glassMode)
                         }
                         Item { Layout.fillWidth: true }
+                        BusyIndicator {
+                            running: root.applying
+                            visible: root.applying
+                            Layout.preferredHeight: Platform.Units.iconSizes.small
+                        }
                         Button {
                             text: qsTr("Refresh")
                             icon.name: "view-refresh"
+                            enabled: !root.applying
                             onClicked: profileController.refresh()
                         }
                         Button {
                             text: qsTr("Apply")
                             icon.name: "dialog-ok-apply"
                             highlighted: true
-                            enabled: root.selectedProfile !== ""
+                            enabled: !root.applying && root.selectedProfile !== ""
                                 && root.selectedProfile !== profileController.activeProfile
                             onClicked: profileController.applyProfile(root.selectedProfile)
                         }
@@ -143,7 +187,11 @@ Kirigami.ApplicationWindow {
                                 isActive: entry ? entry.isActive : false
                                 selected: entry ? root.selectedProfile === entry.name : false
                                 componentCount: entry ? entry.componentCount : 0
-                                onProfileClicked: root.selectedProfile = profileName
+                                // Formal parameter instead of the deprecated
+                                // signal-handler parameter injection.
+                                onProfileClicked: function(profileName) {
+                                    root.selectedProfile = profileName
+                                }
                             }
                         }
 
@@ -153,8 +201,8 @@ Kirigami.ApplicationWindow {
                     Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        color: root.dimColor
-                        font.pointSize: Platform.Units.smallSpacing
+                        color: ThemeColors.dimColor(root.glassMode)
+                        font.pointSize: TypeScale.caption
                         text: {
                             if (root.selectedProfile === "")
                                 return qsTr("Select a profile above, then press Apply.")
@@ -165,6 +213,15 @@ Kirigami.ApplicationWindow {
                                 .arg(profileController.activeProfile)
                         }
                     }
+
+                    Kirigami.InlineMessage {
+                        Layout.fillWidth: true
+                        visible: root.operationMessage !== ""
+                        text: root.operationMessage
+                        type: root._operationSucceeded
+                            ? Kirigami.MessageType.Positive
+                            : Kirigami.MessageType.Error
+                    }
                 }
             }
 
@@ -173,10 +230,10 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
 
                 background: Rectangle {
-                    color: root.cardBg
+                    color: ThemeColors.cardBg(root.glassMode)
                     radius: Platform.Units.smallSpacing
                     border.width: 1
-                    border.color: root.cardBorder
+                    border.color: ThemeColors.cardBorder(root.glassMode)
                 }
 
                 contentItem: ColumnLayout {
@@ -188,12 +245,13 @@ Kirigami.ApplicationWindow {
                         Kirigami.Heading {
                             level: 2
                             text: qsTr("Available Profiles")
-                            color: root.fgColor
+                            color: ThemeColors.fgColor(root.glassMode)
                         }
                         Item { Layout.fillWidth: true }
                         Button {
                             text: qsTr("Save current…")
                             icon.name: "list-add"
+                            enabled: !root.applying
                             onClicked: saveDialog.open()
                         }
                     }
@@ -209,19 +267,19 @@ Kirigami.ApplicationWindow {
                             profileComponentCount: entry ? entry.componentCount : 0
                             profileComponents: entry ? entry.components : []
 
-                            onApplyClicked: profileController.applyProfile(profileName)
-                            onPreviewClicked: {
+                            onApplyClicked: function(profileName) {
+                                profileController.applyProfile(profileName)
+                            }
+                            onPreviewClicked: function(profileName) {
                                 previewDialog.previewProfile = profileName
-                                previewDialog.activeProfile = profileController.activeProfile
                                 previewDialog.open()
                             }
-                            onDiffClicked: {
+                            onDiffClicked: function(profileName) {
                                 diffDialog.profileA = profileName
                                 diffDialog.profileB = profileController.activeProfile
-                                diffDialog.updateDiff()
                                 diffDialog.open()
                             }
-                            onDeleteClicked: {
+                            onDeleteClicked: function(profileName) {
                                 confirmDialog.targetProfile = profileName
                                 confirmDialog.open()
                             }
@@ -232,7 +290,7 @@ Kirigami.ApplicationWindow {
                         Layout.fillWidth: true
                         visible: profileController.profiles.length === 0
                         text: qsTr("No profiles found. Save the current theme to create one.")
-                        color: root.dimColor
+                        color: ThemeColors.dimColor(root.glassMode)
                         wrapMode: Text.WordWrap
                     }
                 }
@@ -243,10 +301,10 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
 
                 background: Rectangle {
-                    color: root.cardBg
+                    color: ThemeColors.cardBg(root.glassMode)
                     radius: Platform.Units.smallSpacing
                     border.width: 1
-                    border.color: root.cardBorder
+                    border.color: ThemeColors.cardBorder(root.glassMode)
                 }
 
                 contentItem: ColumnLayout {
@@ -258,7 +316,7 @@ Kirigami.ApplicationWindow {
                         Kirigami.Heading {
                             level: 2
                             text: qsTr("Wallpaper")
-                            color: root.fgColor
+                            color: ThemeColors.fgColor(root.glassMode)
                         }
                         Item { Layout.fillWidth: true }
                         Button {
@@ -284,14 +342,16 @@ Kirigami.ApplicationWindow {
                             color: "transparent"
                             radius: 8
                             border.width: 1
-                            border.color: root.cardBorder
+                            border.color: ThemeColors.cardBorder(root.glassMode)
                         }
                     }
 
                     Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
                         visible: wallpaperController.currentWallpaper === ""
                         text: qsTr("No wallpaper information available.")
-                        color: root.dimColor
+                        color: ThemeColors.dimColor(root.glassMode)
                     }
 
                     RowLayout {
@@ -392,6 +452,10 @@ Kirigami.ApplicationWindow {
             }
         }
 
+        // Same lazy-compute pattern as previewDialog: the dialog content only
+        // exists once the popup is opened, so build the diff there.
+        onOpened: updateDiff()
+
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -407,6 +471,12 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredHeight: 360
+                // Kirigami.Dialog sizes itself as
+                // max(preferredWidth, content implicit width), so a wide diff
+                // would blow the dialog up to the width of its longest line.
+                // Reporting 0 keeps the dialog at preferredWidth while the
+                // (unwrapped) TextEdit still gets a real horizontal scrollbar.
+                implicitWidth: 0
                 clip: true
 
                 TextEdit {
@@ -430,18 +500,36 @@ Kirigami.ApplicationWindow {
         property var componentsToApply: []
         property string diffContent: ""
 
-        onPreviewProfileChanged: {
-            if (previewDialog.previewProfile !== "" && previewDialog.activeProfile !== "") {
-                var comps = profileController.getProfileComponents(previewDialog.previewProfile)
-                var list = []
-                for (var i = 0; i < comps.length; i++) {
-                    list.push(comps[i])
-                }
-                previewDialog.componentsToApply = list
-                previewDialog.diffContent = profileController.diffProfiles(
-                    previewDialog.activeProfile, previewDialog.previewProfile)
+        // Computed lazily when the dialog is actually opened: the active
+        // profile is read *now* instead of relying on a property-changed
+        // handler that may have fired before activeProfile was assigned.
+        function updatePreview() {
+            var active = profileController.activeProfile
+            previewDialog.activeProfile = active
+
+            if (previewDialog.previewProfile === "") {
+                previewDialog.componentsToApply = []
+                previewDialog.diffContent = ""
+                return
+            }
+
+            var comps = profileController.getProfileComponents(previewDialog.previewProfile)
+            var list = []
+            for (var i = 0; i < comps.length; i++) {
+                list.push(comps[i])
+            }
+            previewDialog.componentsToApply = list
+
+            if (active === "") {
+                previewDialog.diffContent = qsTr("No active profile to compare with.")
+            } else if (active === previewDialog.previewProfile) {
+                previewDialog.diffContent = qsTr("\"%1\" is already the active profile.").arg(previewDialog.previewProfile)
+            } else {
+                previewDialog.diffContent = profileController.diffProfiles(active, previewDialog.previewProfile)
             }
         }
+
+        onOpened: updatePreview()
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -476,6 +564,7 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredHeight: 280
+                implicitWidth: 0   // see diffDialog: keep the dialog at preferredWidth
                 clip: true
 
                 TextEdit {

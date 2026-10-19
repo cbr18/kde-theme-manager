@@ -7,12 +7,6 @@ import org.kde.kirigami 2.20 as Kirigami
 Kirigami.AbstractCard {
     id: card
 
-    // Fallback colors for PySide6 bundled Qt
-    function safeColor(role, fallback) {
-        var c = Kirigami.Theme[role]
-        return c && c.valid ? c : fallback
-    }
-
     Layout.fillWidth: true
 
     // Explicit data (avoids relying on QML model-role semantics)
@@ -24,9 +18,6 @@ Kirigami.AbstractCard {
     // root window's properties across component-file scopes.
     property bool glassMode: false
 
-    readonly property color fgColor: glassMode ? "#ffffff" : safeColor("textColor", "#1f1f1f")
-    readonly property color dimColor: glassMode ? Qt.rgba(1, 1, 1, 0.80) : Qt.rgba(0.15, 0.15, 0.15, 0.65)
-
     property var compList: profileComponents ? profileComponents : []
     property var firstComponents: compList.slice(0, 8)
     property bool hasMore: compList.length > 8
@@ -36,8 +27,8 @@ Kirigami.AbstractCard {
             "kwin": "preferences-system-windows",
             "plasma_shell": "plasma",
             "kdeglobals": "preferences-desktop-theme",
-            "gtk3": "preferences-desktop-theme-gtk",
-            "gtk4": "preferences-desktop-theme-gtk",
+            "gtk3": "gtk-preferences",
+            "gtk4": "gtk-preferences",
             "qt5ct": "qtlogo",
             "klassy": "preferences-system-windows",
             "kvantum": "preferences-system-windows",
@@ -50,7 +41,7 @@ Kirigami.AbstractCard {
             "vscode": "visual-studio-code",
             "cursor": "text-editor",
             "zen": "web-browser",
-            "obsidian": "x-office-note",
+            "obsidian": "x-office-document",
             "color_schemes": "preferences-desktop-color",
             "look_and_feel": "preferences-desktop-theme"
         }
@@ -69,7 +60,7 @@ Kirigami.AbstractCard {
                 source: "preferences-desktop-theme"
                 Layout.preferredWidth: Platform.Units.iconSizes.large
                 Layout.preferredHeight: Platform.Units.iconSizes.large
-                color: card.safeColor("highlightColor", "#2980b9")
+                color: ThemeColors.accent()
             }
 
             ColumnLayout {
@@ -81,14 +72,14 @@ Kirigami.AbstractCard {
                         : card.profileName === "paper" ? qsTr("Paper")
                         : card.profileName
                     font.bold: true
-                    font.pointSize: Platform.Units.mediumSpacing
-                    color: card.fgColor
+                    font.pointSize: TypeScale.subtitle
+                    color: ThemeColors.fgColor(card.glassMode)
                 }
 
                 Label {
                     text: qsTr("%1 components").arg(card.profileComponentCount)
-                    font.pointSize: Platform.Units.smallSpacing
-                    color: card.dimColor
+                    font.pointSize: TypeScale.caption
+                    color: ThemeColors.dimColor(card.glassMode)
                 }
             }
 
@@ -98,7 +89,7 @@ Kirigami.AbstractCard {
             Kirigami.Icon {
                 source: "dialog-ok-apply"
                 visible: card.profileIsActive
-                color: card.safeColor("positiveTextColor", "#27ae60")
+                color: ThemeColors.positive()
                 Layout.preferredWidth: Platform.Units.iconSizes.medium
                 Layout.preferredHeight: Platform.Units.iconSizes.medium
             }
@@ -135,6 +126,8 @@ Kirigami.AbstractCard {
                 flat: true
                 ToolTip.text: card.profileIsActive ? qsTr("Re-apply profile") : qsTr("Apply profile")
                 ToolTip.visible: hovered
+                Accessible.name: ToolTip.text
+                Accessible.role: Accessible.Button
                 onClicked: card.applyClicked(card.profileName)
             }
 
@@ -144,6 +137,8 @@ Kirigami.AbstractCard {
                 visible: !card.profileIsActive
                 ToolTip.text: qsTr("Preview changes before applying")
                 ToolTip.visible: hovered
+                Accessible.name: ToolTip.text
+                Accessible.role: Accessible.Button
                 onClicked: card.previewClicked(card.profileName)
             }
 
@@ -153,6 +148,8 @@ Kirigami.AbstractCard {
                 visible: !card.profileIsActive
                 ToolTip.text: qsTr("Compare with active profile")
                 ToolTip.visible: hovered
+                Accessible.name: ToolTip.text
+                Accessible.role: Accessible.Button
                 onClicked: card.diffClicked(card.profileName)
             }
 
@@ -162,6 +159,8 @@ Kirigami.AbstractCard {
                 visible: !card.profileIsActive
                 ToolTip.text: qsTr("Delete profile")
                 ToolTip.visible: hovered
+                Accessible.name: ToolTip.text
+                Accessible.role: Accessible.Button
                 onClicked: card.deleteClicked(card.profileName)
             }
         }
@@ -172,16 +171,16 @@ Kirigami.AbstractCard {
         Kirigami.Chip {
             text: "+" + Math.max(0, card.compList.length - 8)
             icon.name: "view-more"
+            ToolTip.text: qsTr("%1 more components").arg(Math.max(0, card.compList.length - 8))
+            ToolTip.visible: hovered
         }
     }
 
     background: Rectangle {
         radius: 8
         border.width: 1
-        color: card.glassMode ? Qt.rgba(1, 1, 1, 0.10) : card.safeColor("viewColor", "#ffffff")
-        border.color: card.glassMode
-            ? Qt.rgba(1, 1, 1, 0.18)
-            : Qt.rgba(0.15, 0.15, 0.15, 0.18)
+        color: ThemeColors.cardBg(card.glassMode)
+        border.color: ThemeColors.cardBorder(card.glassMode)
     }
 
     // Signals

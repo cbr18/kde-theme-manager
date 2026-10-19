@@ -7,15 +7,9 @@ import org.kde.kirigami 2.20 as Kirigami
 Kirigami.AbstractCard {
     id: card
 
-    // Fallback colors for PySide6 bundled Qt
-    function safeColor(role, fallback) {
-        var c = Kirigami.Theme[role]
-        return c && c.valid ? c : fallback
-    }
-
-    Layout.preferredWidth: 180
-    Layout.minimumWidth: 150
-    Layout.maximumWidth: 240
+    Layout.preferredWidth: Platform.Units.gridUnit * 11
+    Layout.minimumWidth: Platform.Units.gridUnit * 9
+    Layout.maximumWidth: Platform.Units.gridUnit * 16
 
     property string profileName: ""
     // isActive: profile currently applied to the system
@@ -29,12 +23,25 @@ Kirigami.AbstractCard {
         : profileName === "paper" ? qsTr("Paper")
         : profileName
 
-    readonly property color accentColor: safeColor("highlightColor", "#3daee9")
-    readonly property color positiveColor: safeColor("positiveTextColor", "#27ae60")
-    readonly property color fgColor: glassMode ? "#f0f0f0" : safeColor("textColor", "#1f1f1f")
-    readonly property color dimColor: glassMode ? Qt.rgba(1, 1, 1, 0.80) : Qt.rgba(0.15, 0.15, 0.15, 0.65)
-
     signal profileClicked(string profileName)
+
+    // Whole card is the click/keyboard target.
+    activeFocusOnTab: true
+    Keys.onSpacePressed: card.profileClicked(card.profileName)
+    Keys.onReturnPressed: card.profileClicked(card.profileName)
+    Keys.onEnterPressed: card.profileClicked(card.profileName)
+
+    TapHandler {
+        onTapped: card.profileClicked(card.profileName)
+    }
+
+    HoverHandler { id: hover }
+
+    // Slightly brighten the singleton border colour (glass borders are
+    // transparent white, so Qt.lighter() would be a no-op).
+    function brighten(c) {
+        return Qt.rgba(c.r, c.g, c.b, Math.min(1, c.a * 2))
+    }
 
     contentItem: ColumnLayout {
         spacing: 2
@@ -44,20 +51,37 @@ Kirigami.AbstractCard {
             spacing: Platform.Units.smallSpacing
 
             RadioButton {
+                id: radio
                 Layout.fillWidth: true
-                checked: card.isActive || card.selected
+                checked: card.selected
+                // A QQC2 control writes to `checked` on click, which would
+                // destroy the binding above and let two radios look checked
+                // at once. Re-arm it so the model stays authoritative.
+                Binding {
+                    target: radio
+                    property: "checked"
+                    value: card.selected
+                    restoreMode: Binding.RestoreBindingOrValue
+                }
+                autoExclusive: false
+                activeFocusOnTab: false
                 enabled: card.enabled
                 text: card.displayName
                 font.bold: card.isActive
                 onClicked: card.profileClicked(card.profileName)
-                palette.windowText: card.fgColor
-                palette.text: card.fgColor
+                // `toggled` only fires for user interaction, so this can never
+                // fight the Binding above (which only re-arms on model change).
+                // It closes the window where clicking an unselected radio set
+                // `checked` by hand before the model caught up.
+                onToggled: radio.checked = card.selected
+                palette.windowText: ThemeColors.fgColor(card.glassMode)
+                palette.text: ThemeColors.fgColor(card.glassMode)
             }
 
             Kirigami.Icon {
                 visible: card.isActive
                 source: "dialog-ok-apply"
-                color: card.positiveColor
+                color: ThemeColors.positive()
                 Layout.preferredWidth: 18
                 Layout.preferredHeight: 18
                 Layout.alignment: Qt.AlignVCenter
@@ -65,40 +89,48 @@ Kirigami.AbstractCard {
         }
 
         Label {
-            Layout.leftMargin: Platform.Units.gridUnit * 1.6
+            Layout.leftMargin: Platform.Units.iconSizes.small
             text: qsTr("%1 components").arg(card.componentCount)
-            font.pointSize: Platform.Units.smallSpacing
-            color: card.dimColor
+            font.pointSize: TypeScale.caption
+            color: ThemeColors.dimColor(card.glassMode)
         }
 
         Label {
-            Layout.leftMargin: Platform.Units.gridUnit * 1.6
+            Layout.leftMargin: Platform.Units.iconSizes.small
             visible: card.isActive
             text: qsTr("Active now")
-            font.pointSize: Platform.Units.smallSpacing
-            color: card.positiveColor
+            font.pointSize: TypeScale.caption
+            // Slightly lighter in glass mode: the dark translucent panel eats
+            // most of the contrast of the mid-tone positive colour.
+            color: card.glassMode
+                ? Qt.lighter(ThemeColors.positive(), 1.35)
+                : ThemeColors.positive()
         }
 
         Label {
-            Layout.leftMargin: Platform.Units.gridUnit * 1.6
+            Layout.leftMargin: Platform.Units.iconSizes.small
             visible: !card.isActive && card.selected
             text: qsTr("Press Apply to use")
-            font.pointSize: Platform.Units.smallSpacing
-            color: card.accentColor
+            font.pointSize: TypeScale.caption
+            color: card.glassMode
+                ? Qt.lighter(ThemeColors.accent(), 1.35)
+                : ThemeColors.accent()
         }
     }
 
     background: Rectangle {
         radius: 8
-        implicitWidth: 180
-        implicitHeight: 96
         border.width: (card.isActive || card.selected) ? 2 : 1
-        border.color: card.isActive ? card.positiveColor
-            : card.selected ? card.accentColor
-            : (card.glassMode ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0.15, 0.15, 0.15, 0.22))
-        color: card.isActive ? Qt.rgba(card.positiveColor.r, card.positiveColor.g, card.positiveColor.b, 0.16)
-            : card.selected ? Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.16)
-            : (card.glassMode ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
+        border.color: card.activeFocus ? ThemeColors.accent()
+            : card.isActive ? ThemeColors.positive()
+            : card.selected ? ThemeColors.accent()
+            : hover.hovered ? card.brighten(ThemeColors.cardBorder(card.glassMode))
+            : ThemeColors.cardBorder(card.glassMode)
+        // The accent/positive fill tint used to be here, but green-on-green
+        // ("Active now" in positive text over a positive tint) and
+        // accent-on-accent were barely readable. The 2 px coloured border plus
+        // the check icon already carry the state, so the fill stays neutral.
+        color: card.glassMode ? ThemeColors.nestedBg(card.glassMode) : "transparent"
 
         Behavior on border.color { ColorAnimation { duration: 150 } }
         Behavior on color { ColorAnimation { duration: 150 } }
