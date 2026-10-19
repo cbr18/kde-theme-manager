@@ -113,10 +113,10 @@ mypy src/
 # QML syntax/type lint (PySide6 6.12 ships its own qmllint)
 .venv/bin/pyside6-qmllint -I qml -I /usr/lib/qt6/qml qml/Main.qml qml/pages/SettingsPage.qml qml/Components/*.qml
 
-# Tests (Python: 67, from gui/qt-app)
+# Tests (Python: 73, from gui/qt-app)
 .venv/bin/python -m pytest tests/ -q
 
-# Tests (bash tooling: 33, from the repo root)
+# Tests (bash tooling: 40, from the repo root)
 bash tests/test-scripts.sh
 
 # Static shell analysis (repo root)
@@ -174,6 +174,36 @@ qml/
 > the second argument silently, and the call raises `missing 1 required positional
 > argument` at runtime. `tests/test_gui.py::test_slots_declare_every_python_argument`
 > guards this for every controller.
+
+## Wallpapers
+
+**What is currently shown** is read from Plasma itself
+(`~/.config/plasma-org.kde.plasma.desktop-appletsrc`, group
+`[Containments][N][Wallpaper][org.kde.image][General]`, key `Image`), with the
+cached index `~/.cache/wallpaper_index` only as a fallback. The cache is a
+*position* in the file list, so it silently points at another wallpaper as soon
+as files are added or removed — or when the list order changes.
+
+**The list order is a contract** shared by this app and
+`files/bin/wallpaper-{picker,next,prev}`:
+
+| rule | bash | Python | Rust |
+|---|---|---|---|
+| follow symlinks | `find -L` | `Path.is_file()` | `fs::is_file()` |
+| extensions `jpg jpeg png webp bmp`, case-insensitive | `-iname` | `.suffix.lower()` | `to_lowercase()` |
+| byte/code-point order | `LC_ALL=C sort` | `sorted(key=str)` | `Vec<String>::sort()` |
+
+A locale-aware `sort` (`ru_RU.UTF-8` folds case and ignores punctuation) ordered
+the files differently from `sorted()`, so the GUI resolved the index to a
+different image than the one the scripts had applied. `next`/`prev` now also
+step from the wallpaper Plasma is showing instead of the cached index, which
+makes them self-healing. Guarded by
+`tests/test_gui.py::TestWallpaperOrdering` (runs the real script and compares the
+walked order) and `tests/test-scripts.sh` sections 8–9.
+
+The app passes `WALLPAPER_DIR` to the scripts so that a custom
+`wallpaper_directory` in the settings file cannot diverge from the scripts'
+default.
 
 ## Core Protocol (Replaceable)
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DIR="${WALLPAPER_DIR:-$HOME/Изображения/Wallpaper}"
-STATE="$HOME/.cache/wallpaper_index"
+STATE="${WALLPAPER_STATE:-$HOME/.cache/wallpaper_index}"
 THUMB_DIR="$HOME/.cache/wallpaper-picker"
 
 COLUMNS=4
@@ -14,15 +14,14 @@ THUMB_VERSION="rounded-v1"
 
 mkdir -p "$THUMB_DIR"
 
+# Must stay identical to the enumeration in wallpaper-next / wallpaper-prev
+# (see the comment there): symlinks followed, same extensions, byte-order
+# sort — the index written to $STATE is read back by them and by the Qt app.
 mapfile -t FILES < <(
-    find "$DIR" -maxdepth 1 -type f \
-        \( \
-            -iname '*.jpg' \
-            -o -iname '*.jpeg' \
-            -o -iname '*.png' \
-            -o -iname '*.webp' \
-        \) |
-        sort
+    find -L "$DIR" -maxdepth 1 -type f \
+        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \
+        -o -iname '*.webp' -o -iname '*.bmp' \) 2>/dev/null |
+        LC_ALL=C sort
 )
 
 COUNT=${#FILES[@]}
@@ -95,6 +94,7 @@ SELECTED_FILE="${DISPLAYED_FILES[$SELECTED_INDEX]}"
 
 [ -z "$SELECTED_FILE" ] && exit 1
 
+mkdir -p "$(dirname "$STATE")"
 for i in "${!FILES[@]}"; do
     if [ "${FILES[$i]}" = "$SELECTED_FILE" ]; then
         echo "$i" > "$STATE"
@@ -102,4 +102,9 @@ for i in "${!FILES[@]}"; do
     fi
 done
 
-plasma-apply-wallpaperimage "$SELECTED_FILE"
+if [ -n "${WALLPAPER_DRY_RUN:-}" ]; then
+    # Test/debug hook: report the chosen file instead of applying it.
+    printf '%s\n' "$SELECTED_FILE"
+else
+    plasma-apply-wallpaperimage "$SELECTED_FILE"
+fi

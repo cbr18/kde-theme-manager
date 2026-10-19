@@ -196,6 +196,125 @@ else
   fail "wallpaper-prev: stderr leaked: $ERR_OUT"
 fi
 
+# --- 8. Wallpaper list order, next/prev anchoring -----------------------------
+echo "=== Section 8: Wallpaper list order and next/prev anchoring ==="
+
+WP_BIN="$SCRIPT_DIR/files/bin"
+WALL_TMP="$TMP_ROOT/wall-order"
+PLASMA_TMP="$TMP_ROOT/plasma-appletsrc"
+rm -rf "$WALL_TMP"
+mkdir -p "$WALL_TMP"
+
+for name in apple.png Zebra.png -dash.jpg 1number.webp Beta.bmp UP.PNG Обои.jpg notes.txt; do
+  touch "$WALL_TMP/$name"
+done
+ln -s apple.png "$WALL_TMP/linked.png"
+
+# Byte order, symlinks followed, .bmp and uppercase extensions accepted.
+EXPECTED=(
+  "-dash.jpg" "1number.webp" "Beta.bmp" "UP.PNG"
+  "Zebra.png" "apple.png" "linked.png" "Обои.jpg"
+)
+
+wall_run() { # script state
+  WALLPAPER_DIR="$WALL_TMP" \
+    WALLPAPER_STATE="$2" \
+    WALLPAPER_DRY_RUN=1 \
+    PLASMA_APPLETSRC="$TMP_ROOT/no-such-appletsrc" \
+    bash "$WP_BIN/$1"
+}
+
+STATE_O="$TMP_ROOT/wall-order-state"
+printf '%s' "$((${#EXPECTED[@]} - 1))" > "$STATE_O"
+
+WALKED=()
+for _ in "${EXPECTED[@]}"; do
+  WALKED+=("$(basename "$(wall_run wallpaper-next "$STATE_O")")")
+done
+
+if [ "${WALKED[*]}" = "${EXPECTED[*]}" ]; then
+  ok "wallpaper-next walks the byte-ordered list incl. symlink/.bmp/UPPER.PNG"
+else
+  fail "wallpaper-next order: got [${WALKED[*]}] want [${EXPECTED[*]}]"
+fi
+
+printf '0' > "$STATE_O"
+if [ "$(basename "$(wall_run wallpaper-prev "$STATE_O")")" = "Обои.jpg" ]; then
+  ok "wallpaper-prev: 0 → last (wrap, Unicode-safe)"
+else
+  fail "wallpaper-prev: 0 → last (wrap, Unicode-safe)"
+fi
+
+# next/prev must step from the wallpaper Plasma actually shows, not from a
+# stale cached index (a file added/removed shifts every index).
+{
+  printf '[Containments][281][Wallpaper][org.kde.image][General]\n'
+  printf 'Image=file://%s/Zebra.png\n' "$WALL_TMP"
+  printf '[Containments][281][Wallpaper][org.kde.slideshow][General]\n'
+  printf 'Image=file://%s/apple.png\n' "$WALL_TMP"
+} > "$PLASMA_TMP"
+
+printf '0' > "$STATE_O"
+got="$(basename "$(
+  WALLPAPER_DIR="$WALL_TMP" WALLPAPER_STATE="$STATE_O" WALLPAPER_DRY_RUN=1 \
+    PLASMA_APPLETSRC="$PLASMA_TMP" bash "$WP_BIN/wallpaper-next"
+)")"
+if [ "$got" = "apple.png" ]; then
+  ok "wallpaper-next anchors on the applied wallpaper (not the stale index)"
+else
+  fail "wallpaper-next anchoring: got $got want apple.png"
+fi
+
+got="$(basename "$(
+  WALLPAPER_DIR="$WALL_TMP" WALLPAPER_STATE="$STATE_O" WALLPAPER_DRY_RUN=1 \
+    PLASMA_APPLETSRC="$PLASMA_TMP" bash "$WP_BIN/wallpaper-prev"
+)")"
+if [ "$got" = "UP.PNG" ]; then
+  ok "wallpaper-prev anchors on the applied wallpaper"
+else
+  fail "wallpaper-prev anchoring: got $got want UP.PNG"
+fi
+
+# Garbage in the state file must not abort the scripts (set -e).
+printf 'oops' > "$STATE_O"
+if WALLPAPER_DIR="$WALL_TMP" WALLPAPER_STATE="$STATE_O" WALLPAPER_DRY_RUN=1 \
+    PLASMA_APPLETSRC="$TMP_ROOT/no-such-appletsrc" \
+    run_silent bash "$WP_BIN/wallpaper-next"; then
+  ok "wallpaper-next survives a non-numeric state file"
+else
+  fail "wallpaper-next dies on a non-numeric state file"
+fi
+
+# --- 9. wallpapers scripts must not drift ------------------------------------
+echo "=== Section 9: wallpaper-* scripts share one enumeration ==="
+
+extract_block() { # file start_regex
+  awk -v start="$2" '$0 ~ start { f = 1 } f { print } f && /^\)$/ { exit }' "$1"
+}
+
+enum_picker="$(extract_block "$WP_BIN/wallpaper-picker" '^mapfile -t FILES')"
+enum_next="$(extract_block "$WP_BIN/wallpaper-next" '^mapfile -t FILES')"
+enum_prev="$(extract_block "$WP_BIN/wallpaper-prev" '^mapfile -t FILES')"
+
+if [ -n "$enum_picker" ] && [ "$enum_picker" = "$enum_next" ] && [ "$enum_next" = "$enum_prev" ]; then
+  ok "wallpaper-picker/next/prev enumerate the list identically"
+else
+  fail "wallpaper-* enumeration blocks differ — the cached index would drift"
+fi
+
+extract_func() { # file name
+  awk -v fn="$2" '$0 ~ "^" fn "\\(\\) \\{$" { f = 1 } f { print } f && /^\}$/ { exit }' "$1"
+}
+
+fn_next="$(extract_func "$WP_BIN/wallpaper-next" plasma_wallpaper)"
+fn_prev="$(extract_func "$WP_BIN/wallpaper-prev" plasma_wallpaper)"
+
+if [ -n "$fn_next" ] && [ "$fn_next" = "$fn_prev" ]; then
+  ok "wallpaper-next/prev read the current Plasma wallpaper identically"
+else
+  fail "plasma_wallpaper() differs between wallpaper-next and wallpaper-prev"
+fi
+
 # --- Summary ------------------------------------------------------------------
 echo ""
 echo "═══════════════════════════════════════"

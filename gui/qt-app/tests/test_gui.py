@@ -325,6 +325,149 @@ class TestPythonWallpaperCore:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 7b. Wallpaper list/order and "current wallpaper" resolution
+#
+# The cached index in ~/.cache/wallpaper_index is a *position* in the list, so
+# the bash scripts and this core must enumerate the same files in the same
+# order. A locale-aware `sort` (ru_RU.UTF-8) or a different extension list
+# made the GUI resolve the index to a wallpaper other than the one applied.
+# ─────────────────────────────────────────────────────────────────────────────
+def _make_wallpaper_dir(tmp_path: Path) -> Path:
+    """Wallpaper dir with the names that used to break the ordering."""
+    d = tmp_path / "walls"
+    d.mkdir()
+    for name in (
+        "apple.png",       # lowercase ASCII
+        "Zebra.png",       # uppercase sorts before lowercase in byte order
+        "-dash.jpg",       # leading punctuation sorts before digits
+        "1number.webp",    # digit
+        "Beta.bmp",        # .bmp used to be accepted by Python but not bash
+        "UP.PNG",          # uppercase extension used to be rejected in Rust
+        "Обои.jpg",        # Cyrillic sorts after ASCII in byte order
+        "notes.txt",       # not an image -> never listed
+    ):
+        (d / name).write_bytes(b"x")
+    (d / "linked.png").symlink_to(d / "apple.png")  # find -L / is_file() follow
+    return d
+
+
+class TestWallpaperOrdering:
+    """Ordering/selection rules that the bash scripts and the GUI must share."""
+
+    def _core(self, directory: Path):
+        from core.python_core import PythonWallpaperCore
+
+        core = PythonWallpaperCore()
+        core._wallpaper_dir = directory
+        return core
+
+    def test_list_wallpapers_byte_order_symlinks_and_extensions(
+        self, tmp_path: Path
+    ) -> None:
+        d = _make_wallpaper_dir(tmp_path)
+        files = self._core(d).list_wallpapers()
+
+        names = [Path(f).name for f in files]
+        assert names == sorted(names), "list must be in byte/code-point order"
+        assert "Zebra.png" in names and "apple.png" in names
+        assert names.index("-dash.jpg") == 0
+        assert names.index("Обои.jpg") > names.index("apple.png")
+        assert "Beta.bmp" in names, ".bmp must be listed (bash accepts it)"
+        assert "UP.PNG" in names, "extensions must match case-insensitively"
+        assert "linked.png" in names, "symlinks must be listed (find -L)"
+        assert "notes.txt" not in names
+        assert len(files) == 8
+
+    def test_list_wallpapers_matches_wallpaper_next(self, tmp_path: Path) -> None:
+        """The scripts and the GUI must walk the *same* list in the same order."""
+        script = PROJECT_ROOT.parents[1] / "files" / "bin" / "wallpaper-next"
+        if not script.exists():
+            pytest.skip(f"kit script not found: {script}")
+
+        d = _make_wallpaper_dir(tmp_path)
+        files = [Path(f).name for f in self._core(d).list_wallpapers()]
+
+        state = tmp_path / "state"
+        state.write_text(str(len(files) - 1))  # next one wraps to index 0
+        env = {
+            **os.environ,
+            "WALLPAPER_DIR": str(d),
+            "WALLPAPER_STATE": str(state),
+            "WALLPAPER_DRY_RUN": "1",
+            "PLASMA_APPLETSRC": str(tmp_path / "no-such-config"),
+        }
+
+        walked = []
+        for _ in range(len(files)):
+            proc = subprocess.run(
+                ["bash", str(script)], capture_output=True, text=True, env=env
+            )
+            assert proc.returncode == 0, proc.stderr
+            walked.append(Path(proc.stdout.strip()).name)
+
+        assert walked == files
+
+    def test_current_reads_plasma_config(self, tmp_path: Path, monkeypatch) -> None:
+        """current() must report the wallpaper Plasma actually shows."""
+        from core.python_core import PythonWallpaperCore
+
+        d = _make_wallpaper_dir(tmp_path)
+        real = d / "Zebra.png"
+        config = tmp_path / "appletsrc"
+        config.write_text(
+            "[Containments][1][Wallpaper]\n"
+            "wallpaperPlugin=org.kde.image\n"
+            "[Containments][281][Wallpaper][org.kde.image][General]\n"
+            f"Image=file://{real}\n"
+            "[Containments][282][Wallpaper][org.kde.slideshow][General]\n"
+            "Image=file:///elsewhere/slide.png\n"
+        )
+        monkeypatch.setattr(PythonWallpaperCore, "PLASMA_CONFIG", config)
+
+        core = self._core(d)
+        core.cache_index = tmp_path / "state"
+        core.cache_index.write_text("0")  # wrong on purpose: Plasma must win
+
+        assert core.current() == str(real)
+
+    def test_current_decodes_url_escapes(self, tmp_path: Path, monkeypatch) -> None:
+        from core.python_core import PythonWallpaperCore
+
+        config = tmp_path / "appletsrc"
+        config.write_text(
+            "[Containments][281][Wallpaper][org.kde.image][General]\n"
+            "Image=file:///home/u/My%20Pictures/wall%20one.png\n"
+        )
+        monkeypatch.setattr(PythonWallpaperCore, "PLASMA_CONFIG", config)
+
+        core = self._core(tmp_path)
+        assert core.current() == "/home/u/My Pictures/wall one.png"
+
+    def test_current_falls_back_to_cached_index(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from core.python_core import PythonWallpaperCore
+
+        d = _make_wallpaper_dir(tmp_path)
+        monkeypatch.setattr(
+            PythonWallpaperCore, "PLASMA_CONFIG", tmp_path / "missing-appletsrc"
+        )
+
+        core = self._core(d)
+        core.cache_index = tmp_path / "state"
+        core.cache_index.write_text("2")
+        assert core.current() == core.list_wallpapers()[2]
+
+        core.cache_index.write_text("not-a-number")
+        assert core.current() is None
+
+    def test_script_env_pins_the_wallpaper_dir(self, tmp_path: Path) -> None:
+        """The scripts must be told which dir the app is showing."""
+        core = self._core(tmp_path)
+        assert core._script_env() == {"WALLPAPER_DIR": str(tmp_path)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 8. Tracked apps structure
 # ─────────────────────────────────────────────────────────────────────────────
 def test_tracked_apps_have_required_fields() -> None:

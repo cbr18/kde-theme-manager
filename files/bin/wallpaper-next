@@ -2,18 +2,92 @@
 set -euo pipefail
 
 DIR="${WALLPAPER_DIR:-$HOME/Изображения/Wallpaper}"
-STATE="$HOME/.cache/wallpaper_index"
+STATE="${WALLPAPER_STATE:-$HOME/.cache/wallpaper_index}"
+PLASMA_CONFIG="${PLASMA_APPLETSRC:-$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc}"
 
-mapfile -t FILES < <(find "$DIR" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | sort)
+# ── The wallpaper list ───────────────────────────────────────────────────────
+# The index in $STATE is a *position* in this list, so every consumer (these
+# scripts, the Qt app's Python core and its Rust core) must enumerate the same
+# files in the same order:
+#   * follow symlinks     -> find -L        / Path.is_file() / fs::is_file()
+#   * the same extensions -> jpg, jpeg, png, webp, bmp
+#   * byte order          -> LC_ALL=C sort  / sorted() / String::sort()
+# A locale-aware sort (ru_RU.UTF-8 and others fold case and ignore
+# punctuation) orders the files differently from sorted(), which made the GUI
+# resolve the cached index to a different wallpaper than the one applied here.
+# Keep this block identical to wallpaper-prev and wallpaper-picker.
+mapfile -t FILES < <(
+    find -L "$DIR" -maxdepth 1 -type f \
+        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \
+        -o -iname '*.webp' -o -iname '*.bmp' \) 2>/dev/null |
+        LC_ALL=C sort
+)
 COUNT=${#FILES[@]}
 
 [ "$COUNT" -eq 0 ] && exit 1
 
-INDEX=0
-[ -f "$STATE" ] && INDEX=$(cat "$STATE" 2>/dev/null || echo 0)
+# ── Starting point ───────────────────────────────────────────────────────────
+# Advance relative to the wallpaper Plasma is *actually* showing, not relative
+# to a cached index: the cache goes stale as soon as a file is added or removed
+# (or when the ordering rules change), and "next" would then jump somewhere
+# unrelated to what the user sees. The cache stays as a fallback for when the
+# Plasma config cannot be read.
+plasma_wallpaper() {
+    [ -f "$PLASMA_CONFIG" ] || return 1
 
+    local url
+    url="$(awk '
+        /^\[Containments\]\[[0-9]+\]\[Wallpaper\]\[org\.kde\.image\]\[General\]$/ {
+            in_image = 1
+            next
+        }
+        /^\[/ { in_image = 0; next }
+        in_image && /^Image=/ { sub(/^Image=/, ""); current = $0 }
+        END { if (current != "") print current }
+    ' "$PLASMA_CONFIG")"
+
+    [ -n "$url" ] || return 1
+    url="${url#file://}"
+
+    # KConfig stores a local URL; decode the escapes (%20 …) if there are any.
+    case "$url" in
+        *%*)
+            url="$(printf '%b' "$(printf '%s' "$url" |
+                sed 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')")"
+            ;;
+    esac
+
+    printf '%s\n' "$url"
+}
+
+INDEX=""
+CURRENT_WALLPAPER="$(plasma_wallpaper || true)"
+if [ -n "$CURRENT_WALLPAPER" ]; then
+    for i in "${!FILES[@]}"; do
+        if [ "${FILES[$i]}" = "$CURRENT_WALLPAPER" ]; then
+            INDEX="$i"
+            break
+        fi
+    done
+fi
+
+if [ -z "$INDEX" ] && [ -f "$STATE" ]; then
+    RAW="$(cat "$STATE" 2>/dev/null || true)"
+    case "$RAW" in
+        '' | *[!0-9]*) INDEX=0 ;;
+        *) INDEX="$RAW" ;;
+    esac
+fi
+
+INDEX=${INDEX:-0}
 INDEX=$(( (INDEX + 1) % COUNT ))
 
+mkdir -p "$(dirname "$STATE")"
 echo "$INDEX" > "$STATE"
 
-plasma-apply-wallpaperimage "${FILES[$INDEX]}"
+if [ -n "${WALLPAPER_DRY_RUN:-}" ]; then
+    # Test/debug hook: report what would be applied instead of applying it.
+    printf '%s\n' "${FILES[$INDEX]}"
+else
+    plasma-apply-wallpaperimage "${FILES[$INDEX]}"
+fi

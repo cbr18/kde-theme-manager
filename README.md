@@ -98,6 +98,26 @@ All commands support `--help` / `-h` for usage info.
 
 Profile names may only contain letters, numbers, dots, underscores, and hyphens (`[A-Za-z0-9._-]`).
 
+### Wallpapers / Обои
+
+`wallpaper-next` / `wallpaper-prev` step relative to the wallpaper Plasma is
+**actually showing** (read from
+`~/.config/plasma-org.kde.plasma.desktop-appletsrc`), so they stay correct even
+after you add or remove files. `~/.cache/wallpaper_index` is only a fallback for
+when that config cannot be read.
+
+The list itself is a shared contract between all three scripts and the Qt app:
+same extensions (`jpg`, `jpeg`, `png`, `webp`, `bmp`), symlinks followed, and
+**byte order** (`LC_ALL=C sort`, i.e. `Path.is_file()` + `sorted()` in Python).
+The cached index is a *position* in that list, so a locale-aware sort
+(`ru_RU.UTF-8`, which folds case and ignores punctuation) made the GUI resolve
+the index to a different image than the one applied. All three scripts must keep
+enumerating identically — `tests/test-scripts.sh` (section 9) fails if they drift.
+
+Environment overrides (also used by the GUI and the tests): `WALLPAPER_DIR`,
+`WALLPAPER_STATE`, `PLASMA_APPLETSRC`, `WALLPAPER_DRY_RUN=1` (print the chosen
+file instead of applying it).
+
 ## Profiles / Профили
 
 - **`glass`** — полупрозрачные окна с размытием, KWin glass enabled

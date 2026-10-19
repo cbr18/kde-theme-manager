@@ -116,6 +116,12 @@ pub fn current_wallpaper() -> Result<String> {
 }
 
 /// List all wallpapers
+///
+/// The order and the accepted extensions must match the bash scripts
+/// (files/bin/wallpaper-{picker,next,prev}) and the Python core: the cached
+/// index is a position in this list. `is_file()` follows symlinks (like
+/// `find -L`), extensions are compared case-insensitively (like
+/// `find -iname`), and `sort()` on String is byte order (like `LC_ALL=C sort`).
 pub fn list_wallpapers() -> Result<Vec<String>> {
     let dir = dirs::home_dir().unwrap().join("Изображения/Wallpaper");
     if !dir.exists() {
@@ -130,7 +136,8 @@ pub fn list_wallpapers() -> Result<Vec<String>> {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
-                if extensions.contains(&ext.to_str().unwrap_or("")) {
+                let ext = ext.to_string_lossy().to_lowercase();
+                if extensions.contains(&ext.as_str()) {
                     wallpapers.push(path.to_string_lossy().to_string());
                 }
             }

@@ -6,11 +6,14 @@ Python Core Implementation — обёртки над существующими 
 """
 
 import json
+import os
+import re
 import subprocess
 import time
 import shutil
 from pathlib import Path
 from typing import Optional
+from urllib.parse import unquote, urlsplit
 
 from .protocol import (
     ProfileCore, WallpaperCore, TrackedAppsCore, SettingsCore,
@@ -145,6 +148,11 @@ class PythonProfileCore(ProfileCore):
 # Wallpaper Core
 # ──────────────────────────────────────────────────────────────
 
+# Extensions and ordering *must* match files/bin/wallpaper-{picker,next,prev}:
+# the cached index is a position in that list, not a file name.
+WALLPAPER_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+
+
 class PythonWallpaperCore(WallpaperCore):
     """Обёртка над wallpaper-* bash скриптами."""
 
@@ -167,10 +175,47 @@ class PythonWallpaperCore(WallpaperCore):
     def wallpaper_dir(self) -> Path:
         return self._resolve_wallpaper_dir()
 
-    def _run(self, args: list[str], timeout: int = 15) -> Result:
+    # Plasma stores the desktop wallpaper per screen in the appletsrc; it is the
+    # authoritative answer to "what is on the desktop right now".
+    PLASMA_CONFIG = Path.home() / ".config/plasma-org.kde.plasma.desktop-appletsrc"
+
+    _IMAGE_GROUP_RE = re.compile(
+        r"^\[Containments\]\[\d+\]\[Wallpaper\]\[org\.kde\.image\]\[General\]$"
+    )
+
+    def _plasma_wallpaper(self) -> Optional[str]:
+        """Путь обоев, которые Plasma показывает сейчас (None — не прочитать)."""
+        try:
+            text = self.PLASMA_CONFIG.read_text(errors="replace")
+        except OSError:
+            return None
+
+        url: Optional[str] = None
+        in_image_group = False
+        for line in text.splitlines():
+            if line.startswith("["):
+                in_image_group = self._IMAGE_GROUP_RE.match(line) is not None
+                continue
+            if in_image_group and line.startswith("Image="):
+                url = line[len("Image="):].strip()
+
+        if not url:
+            return None
+        if url.startswith("file://"):
+            path = unquote(urlsplit(url).path)
+        else:
+            path = unquote(url)
+        return path or None
+
+    def _run(
+        self, args: list[str], timeout: int = 15, env: Optional[dict[str, str]] = None
+    ) -> Result:
+        environ = None
+        if env:
+            environ = {**os.environ, **env}
         try:
             proc = subprocess.run(
-                args, capture_output=True, text=True, timeout=timeout
+                args, capture_output=True, text=True, timeout=timeout, env=environ
             )
             return Result(
                 proc.returncode == 0,
@@ -181,21 +226,40 @@ class PythonWallpaperCore(WallpaperCore):
         except Exception as e:
             return Result.err(str(e))
 
+    def _script_env(self) -> dict[str, str]:
+        """Force the scripts to use the directory the app is showing.
+
+        The scripts default to ~/Изображения/Wallpaper, while the app reads
+        `wallpaper_directory` from the settings file; if the two ever differ
+        the index written by a script would point into another list.
+        """
+        return {"WALLPAPER_DIR": str(self.wallpaper_dir)}
+
     def pick(self) -> Optional[str]:
         """Открыть wofi пикер — ждём завершения, возвращаем выбранный файл."""
         # wallpaper-picker записывает индекс в cache, затем применяет
-        res = self._run(["wallpaper-picker"], timeout=60)
+        res = self._run(["wallpaper-picker"], timeout=60, env=self._script_env())
         if res.success:
             return self.current()
         return None
 
     def next(self) -> Result:
-        return self._run(["wallpaper-next"])
+        return self._run(["wallpaper-next"], env=self._script_env())
 
     def prev(self) -> Result:
-        return self._run(["wallpaper-prev"])
+        return self._run(["wallpaper-prev"], env=self._script_env())
 
     def current(self) -> Optional[str]:
+        """Текущие обои: реальное значение Plasma, иначе кэшированный индекс.
+
+        The cached index only resolves correctly while the file list is
+        unchanged, and it silently pointed at another wallpaper whenever the
+        enumeration order changed. Plasma knows the actual answer.
+        """
+        real = self._plasma_wallpaper()
+        if real:
+            return real
+
         try:
             idx_text = self.cache_index.read_text().strip()
             if not idx_text.isdigit():
@@ -209,13 +273,25 @@ class PythonWallpaperCore(WallpaperCore):
         return None
 
     def list_wallpapers(self) -> list[str]:
-        if not self.wallpaper_dir.exists():
+        """Файлы обоев в том же порядке, что и в bash-скриптах.
+
+        The cached index is a *position* in this list, so the ordering rules
+        have to match files/bin/wallpaper-{picker,next,prev} exactly:
+        symlinks are followed (Path.is_file(), like find -L), the same
+        extensions are accepted, and the sort is by the path string, i.e.
+        code-point order — identical to `LC_ALL=C sort` over the UTF-8 bytes,
+        but *not* to a locale-aware sort.
+        """
+        try:
+            entries = list(self.wallpaper_dir.iterdir())
+        except OSError:
             return []
-        exts = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
-        files = sorted(
-            f for f in self.wallpaper_dir.iterdir()
-            if f.is_file() and f.suffix.lower() in exts
-        )
+
+        files = [
+            f for f in entries
+            if f.is_file() and f.suffix.lower() in WALLPAPER_EXTENSIONS
+        ]
+        files.sort(key=str)
         return [str(f) for f in files]
 
     def set_wallpaper(self, path: str) -> Result:
