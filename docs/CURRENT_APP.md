@@ -207,8 +207,13 @@ wallpaper-prev                   # предыдущие обои
 ## Планы (v2 — Qt/QML)
 
 См. [TZ-QT-APP.md](TZ-QT-APP.md) — полное техническое задание на переписывание:
-- Native KDE UI на Kirigami/QML
-- Гранулярный выбор компонентов (галочки)
-- Детект установленных приложений
-- Dogfooding (приложение само темизируется)
-- Clean Architecture для замены Core на Rust
+- Native KDE UI на Kirigami/QML — **сделано** (`gui/qt-app/`, см. `gui/qt-app/README.md`)
+- Гранулярный выбор компонентов (галочки) — **сделано**
+- Детект установленных приложений — **сделано**
+- Dogfooding (приложение само темизируется) — **сделано**
+- Clean Architecture для замены Core на Rust — **сделано**: два взаимозаменяемых
+  ядра, выбор через `--core python|rust|auto`, `$KTM_CORE` или
+  *Settings → Core*; Rust-библиотека `libkde_theme_core.so` ставится в
+  `~/.local/share/kde-theme-manager/lib/`, при её отсутствии приложение
+  откатывается на Python-ядро. Паритет ядер проверяется
+  `tests/test_gui.py::TestCoreParity`.

@@ -41,7 +41,7 @@
 
 | Component | Purpose |
 |-----------|---------|
-| `gui/qt-app/` | **KDE Theme Manager** — native Qt/QML + Kirigami desktop app with profile cards, wallpaper picker, settings, and system tray |
+| `gui/qt-app/` | **KDE Theme Manager** — native Qt/QML + Kirigami desktop app with profile cards, wallpaper picker, settings, system tray, and two interchangeable cores (Python / Rust) |
 
 Run from the source tree during development:
 
@@ -49,6 +49,7 @@ Run from the source tree during development:
 cd gui/qt-app
 uv venv && uv pip install -e ".[dev]"
 uv run kde-theme-manager  # or: python -m src
+uv run kde-theme-manager --core rust   # once `cargo build --release` has run
 ```
 
 For normal use install it once — see below.
@@ -100,13 +101,30 @@ Options:
 install-theme-profile-kit.sh --help      # show help
 install-theme-profile-kit.sh --no-gui    # scripts only, no app
 
-# GUI alone (paths, --with-venv / --no-venv and details):
+# GUI alone (paths, --with-venv / --no-venv / --with-rust / --no-rust):
 scripts/install-kde-theme-manager.sh --help
 ```
 
 A virtual environment is created inside the installed app only when the system
 Python cannot `import PySide6` (e.g. `pyside6` is not installed from the
 distro); with a system PySide6 the copy stays ~650 KB.
+
+### GUI cores / Ядра GUI
+
+The app runs on either of two interchangeable cores — the Python core (wrapping
+the bash scripts) and the Rust core (`libkde_theme_core.so`). Choose one:
+
+```bash
+kde-theme-manager --core rust      # python | rust | auto (auto = rust if built)
+kde-theme-manager --list-cores     # show what is available and where
+KTM_CORE=rust kde-theme-manager    # per-run override
+# Settings → Core switches it for the next start
+```
+
+The installer ships the library as
+`~/.local/share/kde-theme-manager/lib/libkde_theme_core.so` when it is built
+(`--with-rust` builds it on demand, `--no-rust` skips it). Without the library
+the app uses the Python core, so the GUI always starts.
 
 ## Usage / Использование
 

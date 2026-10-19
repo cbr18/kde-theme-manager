@@ -2,8 +2,7 @@
 
 use std::path::PathBuf;
 use std::fs;
-use anyhow::{Result, Context};
-use serde::{Deserialize, Serialize};
+use anyhow::Result;
 use dirs;
 
 pub use crate::types::{AppSettings, OperationResult};

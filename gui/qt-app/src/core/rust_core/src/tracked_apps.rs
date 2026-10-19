@@ -1,14 +1,13 @@
 //! Tracked Apps Core Implementation
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
-use std::collections::HashMap;
-use anyhow::{Result, Context};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use dirs;
 use which;
 
-use crate::types::{Component, AppStatus};
+use crate::types::Component;
 
 /// Tracked Apps Core Trait
 pub trait TrackedAppsCore {
@@ -60,6 +59,14 @@ struct TrackedAppDef {
 }
 
 /// All tracked applications
+/// Component id → config paths, for profile-content detection
+pub fn component_config_paths() -> Vec<(String, Vec<String>)> {
+    get_tracked_apps()
+        .into_iter()
+        .map(|app| (app.id, app.config_paths))
+        .collect()
+}
+
 fn get_tracked_apps() -> Vec<TrackedAppDef> {
     vec![
         TrackedAppDef {
@@ -356,29 +363,28 @@ fn get_tracked_apps() -> Vec<TrackedAppDef> {
 }
 
 /// Detect status of a single app
+///
+/// Mirrors Python's `detect_app_status`: the flatpak id is only consulted when
+/// a `detect_command` is missing, otherwise apps that are installed outside
+/// flatpak (e.g. zen with a local ~/.zen profile) were reported as
+/// "not_installed" even though their configs are right there.
 fn detect_app_status(app: &TrackedAppDef) -> crate::types::AppStatus {
-    // Check command
     if let Some(cmd) = &app.detect_command {
-        if which::which(cmd.split_whitespace().next().unwrap()).is_err() {
-            if let Some(flatpak_id) = &app.flatpak_id {
-                if !is_flatpak_installed(flatpak_id) {
-                    return crate::types::AppStatus::NotInstalled;
-                }
-            } else {
+        if which::which(cmd.split_whitespace().next().unwrap_or(cmd)).is_err() {
+            let via_flatpak = app
+                .flatpak_id
+                .as_ref()
+                .map(|id| is_flatpak_installed(id))
+                .unwrap_or(false);
+            if !via_flatpak {
                 return crate::types::AppStatus::NotInstalled;
             }
-        }
-    } else if let Some(flatpak_id) = &app.flatpak_id {
-        if !is_flatpak_installed(flatpak_id) {
-            return crate::types::AppStatus::NotInstalled;
         }
     }
 
     // Check configs
-    let home = dirs::home_dir().unwrap();
-    let has_configs = app.config_paths.iter().any(|p| {
-        home.join(p).exists()
-    });
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    let has_configs = app.config_paths.iter().any(|p| home.join(p).exists());
 
     if has_configs {
         crate::types::AppStatus::Available

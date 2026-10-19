@@ -81,6 +81,16 @@
 
 ## v0.4.0 — Rust Core (Performance & Single Binary)
 
+> **Статус: Phase 1–2 сделаны** (выбор ядра флагом, паритет с Python покрыт
+> тестами). Файлы Rust-крейта: `src/core/rust_core/src/{lib,ffi,types,profile,
+> wallpaper,tracked_apps,settings,config_parser}.rs`; Python-биндинг —
+> `src/core/rust_core.py`. Мутирующие операции профилей (`apply`/`save`/`diff`)
+> делегируются bash-скрипту `theme-profile` — он владеет картой
+> «компонент → конфиг» и бэкапами; нативное переписывание один раз уже
+> скопировало `kwinrc` в `~/kwin` и перезапускало plasmashell на каждый apply.
+> Переключение: `--core python|rust|auto`, `$KTM_CORE`, *Settings → Core*;
+> без собранной библиотеки приложение работает на Python-ядре.
+
 ### Архитектура
 ```
 src/
@@ -259,12 +269,11 @@ mypy src/
 pytest
 
 # Сборка Rust core (v0.4)
-cd ~/theme-profile-kit/qt-app/src/core/rust_core
+cd ~/projects/kde_mods/theme-profile-kit/gui/qt-app/src/core/rust_core
 cargo build --release
 
 # Запуск с Rust core
-export KDE_THEME_CORE=rust
-python -m src
+python -m src --core rust     # или: KTM_CORE=rust python -m src
 
 # Установка в систему
 cd ~/theme-profile-kit

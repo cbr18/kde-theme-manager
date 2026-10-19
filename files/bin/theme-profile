@@ -447,7 +447,11 @@ case "$cmd" in
     }
     [ -d "$PROFILES/$a" ] || { echo "Profile not found: $a" >&2; exit 1; }
     [ -d "$PROFILES/$b" ] || { echo "Profile not found: $b" >&2; exit 1; }
-    diff -ru "$PROFILES/$a" "$PROFILES/$b"; rc=$?
+    # `set -e` is active, so capture the exit status with `|| rc=$?`:
+    # plain `diff -ru ...; rc=$?` aborts the script on the first difference
+    # (diff exits 1), which made callers report a bogus error instead of the diff.
+    rc=0
+    diff -ru "$PROFILES/$a" "$PROFILES/$b" || rc=$?
     if [ "$rc" -eq 1 ]; then
       # differences found — this is normal
       exit 0

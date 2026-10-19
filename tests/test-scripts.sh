@@ -538,6 +538,97 @@ else
   fail "kit uninstaller (--no-gui) did not remove the scripts"
 fi
 
+# --- 12. Rust core ships with the GUI install --------------------------------
+# The GUI can run on two cores; the Rust one is a shared library the app loads
+# from <appdir>/lib and falls back to Python when it is absent.
+echo "=== Section 12: Rust core installation ==="
+
+RUST_LIB_SRC="$SCRIPT_DIR/gui/qt-app/src/core/rust_core/target/release/libkde_theme_core.so"
+FAKE_HOME_RUST="$TMP_ROOT/fake-home-rust"
+mkdir -p "$FAKE_HOME_RUST"
+
+if bash "$SCRIPT_DIR/scripts/install-kde-theme-manager.sh" --help 2>&1 |
+  grep -q -- "--with-rust"; then
+  ok "installer documents --with-rust / --no-rust"
+else
+  fail "installer --help does not mention the Rust flags"
+fi
+
+# --no-rust must never install a library.
+if env -i HOME="$FAKE_HOME_RUST" XDG_DATA_HOME="$FAKE_HOME_RUST/.local/share" \
+  PATH="/usr/bin:/bin" \
+  bash "$SCRIPT_DIR/scripts/install-kde-theme-manager.sh" --no-venv --no-rust >/dev/null 2>&1; then
+  if [ -e "$FAKE_HOME_RUST/.local/share/kde-theme-manager/lib" ]; then
+    fail "--no-rust still installed a Rust library"
+  else
+    ok "--no-rust installs no Rust core"
+  fi
+else
+  fail "--no-rust install failed"
+fi
+
+# The library loader must resolve the path the installer uses. Both layouts are
+# checked: the installed copy first, the cargo build tree as a fallback.
+loader_check() { # home description
+  env -i HOME="$1" python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+from core.rust_core import find_library
+print(find_library() or "none")
+' "$2/src"
+}
+
+if [ -f "$RUST_LIB_SRC" ]; then
+  rm -rf "$FAKE_HOME_RUST/.local/share/kde-theme-manager"
+  env -i HOME="$FAKE_HOME_RUST" XDG_DATA_HOME="$FAKE_HOME_RUST/.local/share" \
+    PATH="/usr/bin:/bin" \
+    bash "$SCRIPT_DIR/scripts/install-kde-theme-manager.sh" --no-venv >/dev/null 2>&1
+
+  installed_lib="$FAKE_HOME_RUST/.local/share/kde-theme-manager/lib/libkde_theme_core.so"
+  if [ -f "$installed_lib" ]; then
+    ok "prebuilt Rust library installed into <appdir>/lib"
+  else
+    fail "prebuilt Rust library was not installed"
+  fi
+
+  if [ -f "$installed_lib" ] &&
+    cmp -s "$RUST_LIB_SRC" "$installed_lib"; then
+    ok "installed Rust library is the built one"
+  else
+    fail "installed Rust library differs from the built one"
+  fi
+
+  resolved="$(loader_check "$FAKE_HOME_RUST" \
+    "$FAKE_HOME_RUST/.local/share/kde-theme-manager")"
+  case "$resolved" in
+    "$FAKE_HOME_RUST/.local/share/kde-theme-manager/lib/libkde_theme_core.so")
+      ok "the app resolves the installed Rust core (no env override needed)"
+      ;;
+    *) fail "the app resolved an unexpected library: $resolved" ;;
+  esac
+
+  # The library is part of the app directory: uninstalling must take it away.
+  env -i HOME="$FAKE_HOME_RUST" XDG_DATA_HOME="$FAKE_HOME_RUST/.local/share" \
+    PATH="/usr/bin:/bin" \
+    bash "$SCRIPT_DIR/scripts/uninstall-kde-theme-manager.sh" --force >/dev/null 2>&1
+  if [ -e "$FAKE_HOME_RUST/.local/share/kde-theme-manager/lib" ]; then
+    fail "uninstall left the Rust core behind"
+  else
+    ok "uninstall removes the Rust core"
+  fi
+else
+  # A fresh clone has no target/ tree: the installer must warn, not fail, and
+  # the app must fall back to the Python core.
+  out="$(env -i HOME="$FAKE_HOME_RUST" XDG_DATA_HOME="$FAKE_HOME_RUST/.local/share" \
+    PATH="/usr/bin:/bin" \
+    bash "$SCRIPT_DIR/scripts/install-kde-theme-manager.sh" --no-venv 2>&1)"
+  case "$out" in
+    *"Python core"*) ok "missing Rust core warns about the Python fallback" ;;
+    *) fail "missing Rust core produced no warning: $out" ;;
+  esac
+fi
+
+
 # --- Summary ------------------------------------------------------------------
 echo ""
 echo "═══════════════════════════════════════"

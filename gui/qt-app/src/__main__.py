@@ -7,6 +7,7 @@ v0.2.0 — Native KDE UI with Kirigami, Clean Architecture.
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Добавляем src в путь для импортов
 sys.path.insert(0, str(Path(__file__).parent))
@@ -40,14 +41,114 @@ A Qt/QML-based theme profile manager for KDE Plasma.
 Usage: kde-theme-manager [options]
 
 Options:
+  --core NAME    Core implementation: python | rust | auto
+                 (auto picks rust when the library is built)
+  --list-cores   Show the available cores and exit
   --help, -h     Show this help message
   --version      Show version and exit
+
+Without --core the value of $KTM_CORE is used, then the saved setting
+(Settings page → Core). An explicitly requested but missing Rust core is an
+error; an unavailable saved setting falls back to Python with a warning.
 
 Requires KDE Plasma 6 + Kirigami (org.kde.kirigami, org.kde.desktop QML modules).
 For PySide6 bundled Qt, ensure system QML import paths are available.
 """
     )
     return 0
+
+
+def _extract_core_arg() -> Optional[str]:
+    """Pull ``--core``/``--core=`` out of sys.argv (Qt must not see it)."""
+    args = sys.argv[1:]
+    requested: Optional[str] = None
+    rest = [sys.argv[0]]
+
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg.startswith("--core="):
+            requested = arg.split("=", 1)[1]
+        elif arg == "--core":
+            if index + 1 >= len(args):
+                raise SystemExit("--core requires a value: python | rust | auto")
+            index += 1
+            requested = args[index]
+        else:
+            rest.append(arg)
+        index += 1
+
+    sys.argv[:] = rest
+    return requested
+
+
+def _list_cores() -> int:
+    """Print the cores and whether they can be used."""
+    from core.protocol import CoreFactory
+    from core.rust_core import find_library, library_candidates
+
+    available = CoreFactory.rust_available()
+    print("python   always available (wraps the theme-profile / wallpaper-* scripts)")
+    print(f"rust     {'available' if available else 'NOT AVAILABLE'}")
+    found = find_library()
+    if found:
+        print(f"         library: {found}")
+    else:
+        print("         build with: cargo build --release  (in src/core/rust_core)")
+        print("         searched:")
+        for candidate in library_candidates():
+            print(f"           {candidate}")
+    return 0
+
+
+def _select_core(requested: Optional[str]) -> None:
+    """Choose the core backend before any controller is created.
+
+    Priority: --core flag → $KTM_CORE → saved setting → python.
+    """
+    from core.protocol import CoreFactory
+
+    explicit = requested is not None or bool(os.environ.get(CoreFactory.ENV_VAR, "").strip())
+    if requested is None:
+        requested = os.environ.get(CoreFactory.ENV_VAR, "").strip() or None
+
+    if requested is None:
+        try:
+            from core.python_core import PythonSettingsCore
+
+            requested = PythonSettingsCore().load().core_backend or "python"
+        except Exception:
+            requested = "python"
+
+    # A core asked for by flag/env must exist; a stale saved setting must not
+    # stop the application from starting.
+    try:
+        CoreFactory.set_backend(requested, strict=explicit)
+    except Exception as exc:  # noqa: BLE001 - report the reason and bail out
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(3) from exc
+
+    if explicit:
+        # Persist the choice so the launcher and the next start agree.
+        try:
+            from core.protocol import AppSettings
+            from core.python_core import PythonSettingsCore
+
+            settings_core = PythonSettingsCore()
+            settings = settings_core.load()
+            if settings.core_backend != CoreFactory.backend():
+                settings_core.save(
+                    AppSettings(
+                        **{**settings.to_dict(), "core_backend": CoreFactory.backend()}
+                    )
+                )
+        except Exception as exc:  # pragma: no cover - non-fatal
+            print(f"Warning: could not save the core preference: {exc}", file=sys.stderr)
+
+    print(
+        f"Core: {CoreFactory.backend()} ({CoreFactory.backend_label()})",
+        file=sys.stderr,
+    )
 
 
 def _find_system_qml_paths() -> list[str]:
@@ -119,6 +220,12 @@ def main() -> int:
     if "--version" in sys.argv:
         print("KDE Theme Manager 0.2.0-dev")
         return 0
+
+    if "--list-cores" in sys.argv:
+        return _list_cores()
+
+    # Core backend must be chosen before any controller builds its core.
+    _select_core(_extract_core_arg())
 
     # Настройка приложения
     QCoreApplication.setApplicationName("KDE Theme Manager")

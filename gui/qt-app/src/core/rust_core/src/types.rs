@@ -1,6 +1,5 @@
 //! Common Types - Shared data structures across the crate
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -53,6 +52,14 @@ pub struct AppSettings {
     pub confirm_before_apply: bool,
     pub create_backup_before_apply: bool,
     pub notify_on_success: bool,
+    /// Which core implementation the application should use at startup
+    /// ("python" | "rust"). Written by the GUI, read by the launcher.
+    #[serde(default = "default_core_backend")]
+    pub core_backend: String,
+}
+
+fn default_core_backend() -> String {
+    "python".to_string()
 }
 
 impl Default for AppSettings {
@@ -70,6 +77,7 @@ impl Default for AppSettings {
             confirm_before_apply: true,
             create_backup_before_apply: true,
             notify_on_success: true,
+            core_backend: default_core_backend(),
         }
     }
 }

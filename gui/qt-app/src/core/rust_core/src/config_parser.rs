@@ -5,7 +5,6 @@
 use std::path::Path;
 use std::fs;
 use anyhow::{Result, Context};
-use serde::{Deserialize, Serialize};
 use configparser::ini::Ini;
 use toml;
 

@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 from pathlib import Path
+import os
+import sys
 
 
 class AppStatus(Enum):
@@ -193,6 +195,10 @@ class AppSettings:
     create_backup_before_apply: bool = True
     notify_on_success: bool = True
 
+    # Какое ядро использовать при старте: "python" | "rust"
+    # (переопределяется флагом --core и переменной окружения KTM_CORE)
+    core_backend: str = "python"
+
     def to_dict(self) -> dict:
         return {
             "default_components_mode": self.default_components_mode,
@@ -207,6 +213,7 @@ class AppSettings:
             "confirm_before_apply": self.confirm_before_apply,
             "create_backup_before_apply": self.create_backup_before_apply,
             "notify_on_success": self.notify_on_success,
+            "core_backend": self.core_backend,
         }
 
     @classmethod
@@ -224,6 +231,7 @@ class AppSettings:
             confirm_before_apply=data.get("confirm_before_apply", True),
             create_backup_before_apply=data.get("create_backup_before_apply", True),
             notify_on_success=data.get("notify_on_success", True),
+            core_backend=data.get("core_backend", "python"),
         )
 
 
@@ -235,12 +243,111 @@ class CoreFactory:
     """
     Фабрика для получения реализаций Core протоколов.
     Позволяет подменять реализацию (PythonCore → RustCore) в одной точке.
+
+    Ядро выбирается флагом ``--core`` / переменной ``KTM_CORE`` / настройкой
+    ``core_backend``; см. :meth:`set_backend`.
     """
+
+    #: Доступные бэкенды. "auto" — rust, если библиотека есть, иначе python.
+    BACKENDS = ("python", "rust", "auto")
+    #: Переменная окружения, переопределяющая настройку (но не флаг --core).
+    ENV_VAR = "KTM_CORE"
 
     _profile_core: Optional[ProfileCore] = None
     _wallpaper_core: Optional[WallpaperCore] = None
     _tracked_apps_core: Optional[TrackedAppsCore] = None
     _settings_core: Optional[SettingsCore] = None
+
+    _backend: str = "python"          # фактически используемый
+
+    # ── Выбор ядра ─────────────────────────────────────────────
+
+    @classmethod
+    def normalize_backend(cls, backend: str) -> str:
+        """Проверить и нормализовать имя бэкенда."""
+        name = (backend or "").strip().lower()
+        if name not in cls.BACKENDS:
+            raise ValueError(
+                f"Unknown core backend {backend!r}; expected one of "
+                f"{', '.join(cls.BACKENDS)}"
+            )
+        return name
+
+    @classmethod
+    def set_backend(cls, backend: str, strict: bool = True) -> str:
+        """Выбрать ядро и сбросить кэш реализаций.
+
+        ``strict=False`` — «мягкий» режим: если Rust-библиотека недоступна,
+        используется Python-ядро (с предупреждением в stderr). Возвращает
+        фактически используемый бэкенд.
+        """
+        name = cls.normalize_backend(backend)
+
+        if name == "auto":
+            name = "rust" if cls.rust_available() else "python"
+
+        if name == "rust" and not cls.rust_available():
+            if strict:
+                from .rust_core import RustCoreUnavailable, library_candidates
+
+                searched = ", ".join(str(p) for p in library_candidates())
+                raise RustCoreUnavailable(
+                    "Rust core requested but libkde_theme_core.so is not usable. "
+                    f"Build it with `cargo build --release` in src/core/rust_core. "
+                    f"Searched: {searched}"
+                )
+            print(
+                "Warning: Rust core unavailable, falling back to the Python core",
+                file=sys.stderr,
+            )
+            name = "python"
+
+        cls._backend = name
+        cls.reset()
+        return cls._backend
+
+    @classmethod
+    def set_backend_from_env(cls, strict: bool = True, default: str = "python") -> str:
+        """Выбрать ядро из ``KTM_CORE`` (если задана), иначе ``default``."""
+        requested = os.environ.get(cls.ENV_VAR, "").strip() or default
+        return cls.set_backend(requested, strict=strict)
+
+    @classmethod
+    def backend(cls) -> str:
+        """Фактически используемое ядро."""
+        return cls._backend
+
+    @classmethod
+    def backend_label(cls) -> str:
+        """Человекочитаемое имя ядра для UI."""
+        if cls._backend != "rust":
+            return "Python"
+        from .rust_core import library_path
+
+        path = library_path()
+        return f"Rust ({path.name})" if path else "Rust"
+
+    @classmethod
+    def rust_available(cls) -> bool:
+        """Есть ли собранная Rust-библиотека."""
+        try:
+            from .rust_core import is_available
+        except Exception:
+            return False
+        return is_available()
+
+    @classmethod
+    def _build(cls, kind: str):
+        """Создать реализацию нужного ядра."""
+        if cls._backend == "rust":
+            from .rust_core import RUST_FACTORIES
+
+            return RUST_FACTORIES[kind]()
+        from .python_core import PYTHON_FACTORIES
+
+        return PYTHON_FACTORIES[kind]()
+
+    # ── Ручная подмена (тесты) ─────────────────────────────────
 
     @classmethod
     def set_profile_core(cls, core: ProfileCore) -> None:
@@ -261,29 +368,25 @@ class CoreFactory:
     @classmethod
     def profile_core(cls) -> ProfileCore:
         if cls._profile_core is None:
-            from .python_core import PythonProfileCore
-            cls._profile_core = PythonProfileCore()
+            cls._profile_core = cls._build("profile")
         return cls._profile_core
 
     @classmethod
     def wallpaper_core(cls) -> WallpaperCore:
         if cls._wallpaper_core is None:
-            from .python_core import PythonWallpaperCore
-            cls._wallpaper_core = PythonWallpaperCore()
+            cls._wallpaper_core = cls._build("wallpaper")
         return cls._wallpaper_core
 
     @classmethod
     def tracked_apps_core(cls) -> TrackedAppsCore:
         if cls._tracked_apps_core is None:
-            from .python_core import PythonTrackedAppsCore
-            cls._tracked_apps_core = PythonTrackedAppsCore()
+            cls._tracked_apps_core = cls._build("tracked_apps")
         return cls._tracked_apps_core
 
     @classmethod
     def settings_core(cls) -> SettingsCore:
         if cls._settings_core is None:
-            from .python_core import PythonSettingsCore
-            cls._settings_core = PythonSettingsCore()
+            cls._settings_core = cls._build("settings")
         return cls._settings_core
 
     @classmethod

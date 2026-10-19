@@ -90,6 +90,45 @@ theme-profile status
 theme-profile list
 ```
 
+### Rolling back the GUI core
+
+The app can run on the Rust core (`libkde_theme_core.so`) or the Python core.
+If the Rust core misbehaves, go back to Python — no reinstall needed:
+
+```bash
+kde-theme-manager --core python     # this run
+KTM_CORE=python kde-theme-manager   # or via the environment
+# Settings → Core → python persists the choice for the next start
+```
+
+`--core python` is persisted too, so it survives restarts. The setting is stored
+in `~/.config/theme-profile/app-preferences.json` (`"core_backend": "python"`),
+which can also be edited by hand while the app is closed:
+
+```bash
+python3 - <<'PY'
+import json, pathlib
+path = pathlib.Path.home() / ".config/theme-profile/app-preferences.json"
+data = json.loads(path.read_text())
+data["core_backend"] = "python"
+path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+```
+
+If the library is the problem, remove it — the app then reports the Python core
+and keeps working:
+
+```bash
+rm ~/.local/share/kde-theme-manager/lib/libkde_theme_core.so
+kde-theme-manager --list-cores   # → rust NOT AVAILABLE
+```
+
+Per-operation differences worth knowing when switching: profile writes
+(apply/save/diff) go through the same `theme-profile` script in both cores; the
+Rust core only takes over reading (profiles, components, wallpapers, app
+detection, settings). `tests/test_gui.py::TestCoreParity` fails if that ever
+drifts.
+
 ---
 
 ## 3. Emergency: Plasma Shell recovery

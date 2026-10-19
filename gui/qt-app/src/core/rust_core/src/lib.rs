@@ -16,11 +16,9 @@ pub mod config_parser;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::ptr;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, warn};
+use tracing::info;
 
 #[cfg(test)]
 mod tests;
@@ -399,6 +397,29 @@ pub extern "C" fn kde_theme_core_wallpaper_set(path: *const c_char) -> c_int {
 
     match wallpaper::set_wallpaper(p) {
         Ok(_) => 0,
+        Err(e) => {
+            set_last_error(e.to_string());
+            -1
+        }
+    }
+}
+
+/// FFI wrapper for WallpaperCore - override the listing directory
+///
+/// The application reads `wallpaper_directory` from its settings; the Rust core
+/// has to be told about it explicitly (empty string resets to the default).
+#[no_mangle]
+pub extern "C" fn kde_theme_core_wallpaper_set_dir(dir: *const c_char) -> c_int {
+    if dir.is_null() {
+        wallpaper::set_wallpaper_dir("");
+        return 0;
+    }
+
+    match unsafe { CStr::from_ptr(dir) }.to_str() {
+        Ok(s) => {
+            wallpaper::set_wallpaper_dir(s);
+            0
+        }
         Err(e) => {
             set_last_error(e.to_string());
             -1

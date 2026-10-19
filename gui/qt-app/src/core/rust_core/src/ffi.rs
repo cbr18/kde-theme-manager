@@ -1,14 +1,8 @@
 //! FFI Module - C-compatible interface for Python integration
 
-use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int};
+use std::ffi::CString;
+use std::os::raw::c_char;
 use std::ptr;
-
-use crate::profile::*;
-use crate::wallpaper::*;
-use crate::tracked_apps::*;
-use crate::settings::*;
-use crate::config_parser::*;
 
 /// Module initialization
 pub fn register_ffi() {

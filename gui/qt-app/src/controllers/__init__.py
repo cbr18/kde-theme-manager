@@ -528,6 +528,29 @@ class SettingsController(QObject):
             self.settingsChanged.emit()
 
     @Property(str, notify=settingsChanged)
+    def coreBackend(self) -> str:
+        """Ядро, которое будет использовано при следующем запуске."""
+        return self._settings.core_backend
+
+    @coreBackend.setter
+    def coreBackend(self, value: str) -> None:
+        if self._settings.core_backend != value:
+            self._settings = AppSettings(
+                **{**self._settings.to_dict(), "core_backend": value}
+            )
+            self.settingsChanged.emit()
+
+    @Property(str, notify=settingsChanged)
+    def activeCore(self) -> str:
+        """Ядро, работающее прямо сейчас (переключение — рестартом)."""
+        return CoreFactory.backend_label()
+
+    @Property(bool, constant=True)
+    def rustCoreBuilt(self) -> bool:
+        """Собрана ли библиотека Rust-ядра (для предупреждения в UI)."""
+        return CoreFactory.rust_available()
+
+    @Property(str, notify=settingsChanged)
     def theme(self) -> str:
         return self._settings.theme
 

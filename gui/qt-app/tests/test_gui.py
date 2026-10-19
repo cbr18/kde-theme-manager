@@ -17,6 +17,7 @@ import inspect
 import subprocess
 import sys
 import tempfile
+import ctypes
 from pathlib import Path
 from unittest import mock
 
@@ -34,7 +35,9 @@ if str(SRC_DIR) not in sys.path:
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. py_compile validation
 # ─────────────────────────────────────────────────────────────────────────────
-ALL_PY_FILES = sorted(p for p in SRC_DIR.rglob("*.py") if "rust_core" not in str(p))
+ALL_PY_FILES = sorted(
+    p for p in SRC_DIR.rglob("*.py") if "core/rust_core/" not in str(p)
+)
 
 
 @pytest.mark.parametrize("py_file", ALL_PY_FILES, ids=lambda p: p.relative_to(SRC_DIR))
@@ -1339,3 +1342,469 @@ def test_icon_name_survives_kde_icon_loader() -> None:
         "may resolve to that icon instead"
     )
     assert ICON_NAME != "kde-theme-manager"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 30. Rust core: library lookup, FFI contract, graceful degradation
+#
+# The Rust core is an optional drop-in: a shared library behind a C ABI of
+# `*mut c_char` JSON payloads (freed with kde_theme_core_free_string) and
+# c_int status codes. Without the library everything must degrade to the
+# Python core instead of crashing.
+# ─────────────────────────────────────────────────────────────────────────────
+RUST_LIB = (
+    PROJECT_ROOT / "src" / "core" / "rust_core" / "target" / "release"
+    / "libkde_theme_core.so"
+)
+needs_rust_lib = pytest.mark.skipif(
+    not RUST_LIB.is_file(), reason="libkde_theme_core.so is not built"
+)
+
+
+@pytest.fixture
+def core_factory():
+    """Keep CoreFactory on the Python backend around a test."""
+    from core.protocol import CoreFactory
+
+    CoreFactory.set_backend("python")
+    try:
+        yield CoreFactory
+    finally:
+        CoreFactory.set_backend("python")
+
+
+def test_rust_core_library_candidates_cover_both_layouts(monkeypatch) -> None:
+    """Source checkout and installed app layouts must both be searched."""
+    from core import rust_core
+
+    override = Path("/tmp/opencode/does-not-exist/libkde_theme_core.so")
+    monkeypatch.setenv(rust_core.LIBRARY_ENV_VAR, str(override))
+    candidates = rust_core.library_candidates()
+
+    assert candidates[0] == override, "the env override must win"
+    as_text = [str(c) for c in candidates]
+    assert any(c.endswith("rust_core/target/release/libkde_theme_core.so") for c in as_text), (
+        "the cargo build tree must be searched"
+    )
+    # Installed layout: <appdir>/lib, where <appdir> is the package's parent.
+    assert str(PROJECT_ROOT / "lib" / rust_core.LIBRARY_NAME) in as_text, (
+        "the installed app keeps the library in <appdir>/lib"
+    )
+
+
+def test_rust_core_reports_a_missing_library(tmp_path) -> None:
+    from core import rust_core
+
+    with pytest.raises(rust_core.RustCoreUnavailable) as excinfo:
+        rust_core.load_library(path=tmp_path / "nope.so", reload=True)
+
+    assert "nope.so" in str(excinfo.value)
+    # A bogus path must be reported through the inspection API, not raised.
+    assert rust_core.find_library() is None or rust_core.find_library().is_file()
+
+
+def test_rust_core_mapping_helpers() -> None:
+    """The JSON payloads must map onto the protocol dataclasses."""
+    from core import rust_core
+    from core.protocol import AppStatus
+
+    info = rust_core._profile_info(
+        {"name": "glass", "is_active": True, "components": ["kwin"],
+         "created_at": "2026-10-19", "description": "d", "wallpaper_path": "w"}
+    )
+    assert (info.name, info.is_active, info.components) == ("glass", True, ("kwin",))
+    assert info.created_at == "2026-10-19" and info.wallpaper_path == "w"
+
+    # An unknown status must not explode — the UI shows "partial".
+    component = rust_core._component({"id": "kitty", "status": "who-knows"})
+    assert component.status is AppStatus.PARTIAL
+    known = rust_core._component({"id": "kitty", "status": AppStatus.AVAILABLE.value})
+    assert known.status is AppStatus.AVAILABLE
+
+    assert rust_core._json_argument(None) is None
+    assert rust_core._json_argument([]) is None
+    assert json.loads(rust_core._json_argument(["kwin", "gtk3"])) == ["kwin", "gtk3"]
+
+
+def test_rust_core_declares_types_for_a_fixed_signature_table() -> None:
+    """Every FFI entry must carry its argument types and result kind."""
+    from core import rust_core
+
+    kinds = {rust_core._JSON, rust_core._TEXT, rust_core._STATUS}
+    for name, (argtypes, kind) in rust_core._FUNCTIONS.items():
+        assert name.startswith("kde_theme_core_"), name
+        assert kind in kinds, f"{name}: unknown result kind {kind!r}"
+        assert all(t is ctypes.c_char_p for t in argtypes), name
+
+    # Pointers must never be passed as bare Python ints (ctypes would truncate
+    # them to C int and the library would crash inside free()).
+    assert rust_core._FUNCTIONS["kde_theme_core_profile_apply"][0] == [
+        ctypes.c_char_p, ctypes.c_char_p
+    ]
+
+
+@needs_rust_lib
+def test_rust_core_library_exports_the_declared_surface() -> None:
+    from core import rust_core
+
+    library = rust_core.load_library()
+    for name in rust_core._FUNCTIONS:
+        assert getattr(library, name, None) is not None, f"{name} is not exported"
+
+    # Guards the segfault class of bug: without argtypes ctypes truncates the
+    # returned pointer before handing it to free().
+    assert library.kde_theme_core_free_string.argtypes == [ctypes.c_void_p]
+    assert library.kde_theme_core_get_error.restype is ctypes.c_void_p
+
+
+@needs_rust_lib
+def test_rust_core_status_calls_map_errors_to_result(core_factory) -> None:
+    from core.rust_core import RustProfileCore
+
+    result = RustProfileCore().apply("there-is-no-such-profile")
+    assert not result.success and result.message
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 31. Parity: the two cores must stay interchangeable
+#
+# Same listing order, same current wallpaper, same component detection, same
+# diff text — switching cores (--core) must not change what the UI shows.
+# ─────────────────────────────────────────────────────────────────────────────
+@needs_rust_lib
+class TestCoreParity:
+    @staticmethod
+    def cores():
+        from core.python_core import (
+            PythonProfileCore,
+            PythonSettingsCore,
+            PythonTrackedAppsCore,
+            PythonWallpaperCore,
+        )
+        from core.rust_core import (
+            RustProfileCore,
+            RustSettingsCore,
+            RustTrackedAppsCore,
+            RustWallpaperCore,
+        )
+
+        return (
+            (PythonProfileCore(), RustProfileCore()),
+            (PythonWallpaperCore(), RustWallpaperCore()),
+            (PythonTrackedAppsCore(), RustTrackedAppsCore()),
+            (PythonSettingsCore(), RustSettingsCore()),
+        )
+
+    def test_profiles(self, core_factory) -> None:
+        (py, rust), *_ = self.cores()
+
+        py_profiles = py.list_profiles()
+        rust_profiles = rust.list_profiles()
+        assert [p.name for p in rust_profiles] == [p.name for p in py_profiles]
+        for expected, actual in zip(py_profiles, rust_profiles, strict=True):
+            assert actual.is_active == expected.is_active
+            assert actual.components == expected.components
+            assert actual.created_at == expected.created_at
+
+        assert rust.get_active_profile() == py.get_active_profile()
+
+    def test_profile_components_and_diff(self, core_factory) -> None:
+        (py, rust), *_ = self.cores()
+
+        for profile in [p.name for p in py.list_profiles()]:
+            assert rust.get_profile_components(profile) == py.get_profile_components(profile)
+
+        names = [p.name for p in py.list_profiles()][:2]
+        if len(names) == 2:
+            assert rust.diff(*names) == py.diff(*names)
+
+    def test_wallpapers(self, core_factory) -> None:
+        _, (py, rust), *_ = self.cores()
+
+        assert rust.list_wallpapers() == py.list_wallpapers()
+        assert rust.current() == py.current()
+
+    def test_wallpaper_directory_comes_from_the_settings(self, core_factory, tmp_path) -> None:
+        """A settings directory must reach the library (set_dir), not be ignored.
+
+        The cached index is a *position* in the list the app displays, so the
+        library listing another directory would make next/prev jump elsewhere.
+        """
+        from core.protocol import AppSettings
+
+        (tmp_path / "a.jpg").write_bytes(b"x")
+        (tmp_path / "B.PNG").write_bytes(b"x")
+        (tmp_path / "notes.txt").write_bytes(b"x")  # wrong extension: ignored
+        os.symlink(tmp_path / "a.jpg", tmp_path / "0-link.webp")  # symlink: followed
+
+        class FakeSettings:
+            def load(self):
+                return AppSettings(wallpaper_directory=str(tmp_path))
+
+        core_factory.set_settings_core(FakeSettings())
+
+        from core.python_core import PythonWallpaperCore
+        from core.rust_core import RustWallpaperCore
+
+        rust_listed = RustWallpaperCore().list_wallpapers()
+        assert rust_listed == PythonWallpaperCore().list_wallpapers()
+        assert [Path(p).name for p in rust_listed] == ["0-link.webp", "B.PNG", "a.jpg"]
+
+    def test_tracked_apps(self, core_factory) -> None:
+        *_, (py, rust), _ = self.cores()
+
+        py_apps = py.detect_all()
+        rust_apps = rust.detect_all()
+        assert [(c.id, c.status) for c in rust_apps] == [(c.id, c.status) for c in py_apps]
+        assert [c.config_paths for c in rust_apps] == [c.config_paths for c in py_apps]
+        assert rust.get_categories() == py.get_categories()
+
+    def test_settings(self, core_factory) -> None:
+        *_, (py, rust) = self.cores()
+
+        assert rust.get_defaults().to_dict() == py.get_defaults().to_dict()
+        assert rust.load().to_dict() == py.load().to_dict()
+
+    def test_settings_round_trip_keeps_the_core_choice(self, core_factory, monkeypatch, tmp_path) -> None:
+        """Saving through the Rust core must keep `core_backend` (it is a setting).
+
+        Switching to Rust and saving the settings would otherwise silently flip
+        back to Python on the next start.
+        """
+        from core.protocol import AppSettings
+        from core.rust_core import RustSettingsCore
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        saved = AppSettings(
+            **{**AppSettings().to_dict(), "core_backend": "rust", "theme": "paper"}
+        )
+        assert RustSettingsCore().save(saved).success
+
+        written = tmp_path / ".config" / "theme-profile" / "app-preferences.json"
+        assert written.is_file(), "the Rust core must create the config directory"
+
+        loaded = RustSettingsCore().load()
+        assert loaded.core_backend == "rust"
+        assert loaded.theme == "paper"
+        assert loaded.to_dict() == saved.to_dict()
+        # …and the file must stay readable by the Python core.
+        assert AppSettings.from_dict(json.loads(written.read_text())).to_dict() == saved.to_dict()
+
+    def test_mutating_profile_operations_go_through_the_script(self, core_factory) -> None:
+        """The Rust core must delegate apply/save to `theme-profile`.
+
+        A native implementation copied profile entries to `~/<component>`
+        (`kwinrc` → `~/kwin`) and restarted plasmashell on every apply.
+        """
+        rust_source = (SRC_DIR / "core" / "rust_core" / "src" / "profile.rs").read_text()
+
+        assert "run_theme_profile(&args)" in rust_source
+        assert 'run_theme_profile(&["diff"' in rust_source
+        assert "restart_plasma_shell" not in rust_source
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 32. Core selection: --core flag, $KTM_CORE, saved setting, fallback
+# ─────────────────────────────────────────────────────────────────────────────
+def test_core_factory_rejects_unknown_backend(core_factory) -> None:
+    with pytest.raises(ValueError):
+        core_factory.set_backend("cobol")
+
+
+def test_core_factory_auto_prefers_rust_when_built(core_factory, monkeypatch) -> None:
+    monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: True))
+    assert core_factory.set_backend("auto") == "rust"
+
+
+def test_core_factory_auto_falls_back_to_python(core_factory, monkeypatch) -> None:
+    monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: False))
+    assert core_factory.set_backend("auto") == "python"
+
+
+def test_core_factory_strict_rust_failure_is_loud(core_factory, monkeypatch) -> None:
+    from core.rust_core import RustCoreUnavailable
+
+    monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: False))
+    with pytest.raises(RustCoreUnavailable):
+        core_factory.set_backend("rust")
+
+
+def test_core_factory_soft_fallback_warns(core_factory, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: False))
+
+    assert core_factory.set_backend("rust", strict=False) == "python"
+    assert "falling back" in capsys.readouterr().err
+
+
+def test_core_factory_reads_the_environment(core_factory, monkeypatch) -> None:
+    monkeypatch.setenv(core_factory.ENV_VAR, "python")
+    assert core_factory.set_backend_from_env() == "python"
+
+    monkeypatch.delenv(core_factory.ENV_VAR)
+    assert core_factory.set_backend_from_env(default="python") == "python"
+
+
+@needs_rust_lib
+def test_core_factory_builds_rust_implementations(core_factory) -> None:
+    import core.rust_core as rust_core
+
+    assert core_factory.set_backend("rust") == "rust"
+    assert isinstance(core_factory.profile_core(), rust_core.RustProfileCore)
+    assert isinstance(core_factory.wallpaper_core(), rust_core.RustWallpaperCore)
+    assert isinstance(core_factory.tracked_apps_core(), rust_core.RustTrackedAppsCore)
+    assert isinstance(core_factory.settings_core(), rust_core.RustSettingsCore)
+    assert "libkde_theme_core.so" in core_factory.backend_label()
+
+    # Switching back must rebuild the Python implementations.
+    assert core_factory.set_backend("python") == "python"
+    from core.python_core import PythonProfileCore
+
+    assert isinstance(core_factory.profile_core(), PythonProfileCore)
+    assert core_factory.backend_label() == "Python"
+
+
+def test_settings_expose_the_core_selector() -> None:
+    """SettingsController must persist the choice and show the running core."""
+    from core.protocol import AppSettings
+
+    source = (SRC_DIR / "controllers" / "__init__.py").read_text()
+    assert "def coreBackend" in source
+    assert "def activeCore" in source
+    assert "def rustCoreBuilt" in source
+
+    qml = (PROJECT_ROOT / "qml" / "pages" / "SettingsPage.qml").read_text()
+    assert 'settingsController.coreBackend' in qml
+    assert 'model: ["python", "rust", "auto"]' in qml
+
+    defaults = AppSettings()
+    assert defaults.core_backend == "python"
+    assert AppSettings.from_dict({}).core_backend == "python"
+    assert AppSettings.from_dict({"core_backend": "rust"}).core_backend == "rust"
+    assert defaults.to_dict()["core_backend"] == "python"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 33. --core CLI flag
+# ─────────────────────────────────────────────────────────────────────────────
+def _load_main_module():
+    """Import src/__main__.py under a private name (it runs main() only as __main__)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("ktm_main", SRC_DIR / "__main__.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    "argv, expected, rest",
+    [
+        (["--core=rust"], "rust", []),
+        (["--core", "rust"], "rust", []),
+        (["--core=auto", "--verbose"], "auto", ["--verbose"]),
+        (["--core", "python", "file.qml"], "python", ["file.qml"]),
+        ([], None, []),
+    ],
+)
+def test_core_flag_is_parsed_and_removed(argv, expected, rest, monkeypatch) -> None:
+    """Qt must never see --core (a stray value would look like a file to open)."""
+    main_module = _load_main_module()
+    monkeypatch.setattr(sys, "argv", ["kde-theme-manager", *argv])
+
+    assert main_module._extract_core_arg() == expected
+    assert sys.argv[1:] == rest
+
+
+def test_core_flag_without_a_value_is_an_error(monkeypatch) -> None:
+    main_module = _load_main_module()
+    monkeypatch.setattr(sys, "argv", ["kde-theme-manager", "--core"])
+
+    with pytest.raises(SystemExit):
+        main_module._extract_core_arg()
+
+
+def test_explicit_core_that_cannot_load_is_fatal(core_factory, monkeypatch, capsys) -> None:
+    main_module = _load_main_module()
+    monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: False))
+
+    with pytest.raises(SystemExit) as excinfo:
+        main_module._select_core("rust")
+
+    assert excinfo.value.code == 3
+    assert "Error:" in capsys.readouterr().err
+
+
+def test_stale_saved_core_falls_back_instead_of_failing(core_factory, monkeypatch, capsys) -> None:
+    """A setting pointing at a since-removed library must not break startup."""
+    from core.protocol import AppSettings
+
+    main_module = _load_main_module()
+    import core.python_core as python_core
+
+    monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: False))
+    monkeypatch.delenv(core_factory.ENV_VAR, raising=False)
+
+    saved: list[AppSettings] = []
+
+    class FakeSettingsCore:
+        def load(self):
+            return AppSettings(**{**AppSettings().to_dict(), "core_backend": "rust"})
+
+        def save(self, settings):
+            saved.append(settings)
+            from core.protocol import Result
+
+            return Result.ok()
+
+    monkeypatch.setattr(python_core, "PythonSettingsCore", FakeSettingsCore)
+
+    main_module._select_core(None)
+
+    assert core_factory.backend() == "python"
+    assert "falling back" in capsys.readouterr().err
+    assert saved == [], "a fallback must not overwrite the saved preference"
+
+
+def test_explicit_core_is_persisted(core_factory, monkeypatch) -> None:
+    from core.protocol import AppSettings
+
+    main_module = _load_main_module()
+    import core.python_core as python_core
+
+    monkeypatch.delenv(core_factory.ENV_VAR, raising=False)
+    saved: list[AppSettings] = []
+
+    class FakeSettingsCore:
+        def load(self):
+            # Saved as "rust"; the flag asks for python → the preference flips.
+            return AppSettings(**{**AppSettings().to_dict(), "core_backend": "rust"})
+
+        def save(self, settings):
+            saved.append(settings)
+            from core.protocol import Result
+
+            return Result.ok()
+
+    monkeypatch.setattr(python_core, "PythonSettingsCore", FakeSettingsCore)
+
+    main_module._select_core("python")
+
+    assert [s.core_backend for s in saved] == ["python"]
+
+
+def test_list_cores_reports_availability(capsys) -> None:
+    main_module = _load_main_module()
+    assert main_module._list_cores() == 0
+
+    out = capsys.readouterr().out
+    assert "python" in out and "rust" in out
+    assert ("available" in out) or ("NOT AVAILABLE" in out)
+
+
+def test_help_mentions_the_core_flag(capsys) -> None:
+    main_module = _load_main_module()
+    assert main_module._show_help() == 0
+
+    out = capsys.readouterr().out
+    assert "--core" in out and "--list-cores" in out

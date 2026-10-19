@@ -338,4 +338,13 @@ __all__ = [
     "PythonWallpaperCore",
     "PythonTrackedAppsCore",
     "PythonSettingsCore",
+    "PYTHON_FACTORIES",
 ]
+
+#: Ядро, выбираемое CoreFactory._build() — см. CoreFactory.set_backend()
+PYTHON_FACTORIES = {
+    "profile": PythonProfileCore,
+    "wallpaper": PythonWallpaperCore,
+    "tracked_apps": PythonTrackedAppsCore,
+    "settings": PythonSettingsCore,
+}

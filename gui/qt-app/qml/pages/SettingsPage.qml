@@ -212,6 +212,34 @@ Kirigami.ScrollablePage {
                             restoreMode: Binding.RestoreBindingOrValue
                         }
                     }
+
+                    // Which core implementation to use. Applied on restart:
+                    // controllers build their core once at startup.
+                    ComboBox {
+                        id: coreCombo
+                        Layout.fillWidth: true
+                        Kirigami.FormData.label: qsTr("Core")
+                        model: ["python", "rust", "auto"]
+                        onActivated: settingsController.coreBackend = currentText
+                        Binding {
+                            target: coreCombo
+                            property: "currentIndex"
+                            value: coreCombo.model.indexOf(settingsController.coreBackend)
+                            restoreMode: Binding.RestoreBindingOrValue
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: settingsController.rustCoreBuilt
+                              ? qsTr("Running: %1 — restart the app to switch.").arg(settingsController.activeCore)
+                              : qsTr("Running: %1. The Rust library is not built; "
+                                     + "`cargo build --release` in src/core/rust_core.").arg(settingsController.activeCore)
+                        color: ThemeColors.fgColor(page.glassMode)
+                        opacity: 0.7
+                        font.pointSize: TypeScale.caption
+                    }
                 }
             }
         }

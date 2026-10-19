@@ -21,7 +21,8 @@ from .python_core import (
     PythonProfileCore,
     PythonWallpaperCore,
     PythonTrackedAppsCore,
-    PythonSettingsCore
+    PythonSettingsCore,
+    PYTHON_FACTORIES,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "detect_app_status", "build_component", "PythonTrackedAppsCore",
     # Python core
     "PythonProfileCore", "PythonWallpaperCore", "PythonTrackedAppsCore", "PythonSettingsCore",
+    "PYTHON_FACTORIES",
 ]
