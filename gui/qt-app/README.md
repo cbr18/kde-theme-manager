@@ -116,7 +116,7 @@ mypy src/
 # Tests (Python: 73, from gui/qt-app)
 .venv/bin/python -m pytest tests/ -q
 
-# Tests (bash tooling: 40, from the repo root)
+# Tests (bash tooling: 44, from the repo root)
 bash tests/test-scripts.sh
 
 # Static shell analysis (repo root)
@@ -204,6 +204,13 @@ walked order) and `tests/test-scripts.sh` sections 8–9.
 The app passes `WALLPAPER_DIR` to the scripts so that a custom
 `wallpaper_directory` in the settings file cannot diverge from the scripts'
 default.
+
+`wallpaper-picker` passes `--define dmenu-print_line_num=true` to wofi and uses
+the printed value as a **direct 0-based index** into the displayed list: wofi
+numbers the lines from 0 in input order (`modes/dmenu.c`:
+`uint16_t line_num = 0; … snprintf("%u", line_num++)`). The previous `-1`
+correction applied the image above the clicked one and made the first image a
+no-op.
 
 ## Core Protocol (Replaceable)
 

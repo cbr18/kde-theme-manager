@@ -3,7 +3,7 @@ set -euo pipefail
 
 DIR="${WALLPAPER_DIR:-$HOME/Изображения/Wallpaper}"
 STATE="${WALLPAPER_STATE:-$HOME/.cache/wallpaper_index}"
-THUMB_DIR="$HOME/.cache/wallpaper-picker"
+THUMB_DIR="${WALLPAPER_THUMB_DIR:-$HOME/.cache/wallpaper-picker}"
 
 COLUMNS=4
 IMAGE_SIZE=210
@@ -85,12 +85,16 @@ SELECTED_INDEX=$(
 
 [ -z "$SELECTED_INDEX" ] && exit 0
 
-# wofi's --define dmenu-print_line_num returns 1-based line numbers;
-# our DISPLAYED_FILES array is 0-based — convert to avoid off-by-one.
-SELECTED_INDEX=$((SELECTED_INDEX - 1))
-[ "$SELECTED_INDEX" -ge 0 ] || exit 1
+# wofi's `dmenu-print_line_num` prints the *0-based* index of the selected line
+# (modes/dmenu.c: `uint16_t line_num = 0; ... snprintf(action, 6, "%u", line_num++)`,
+# iterating the entries in the order they were fed in). Subtracting 1 here
+# applied the image *above* the clicked one and made the first image a no-op.
+# Anything non-numeric (a custom entry typed into wofi) is not a position.
+case "$SELECTED_INDEX" in
+    *[!0-9]*) exit 1 ;;
+esac
 
-SELECTED_FILE="${DISPLAYED_FILES[$SELECTED_INDEX]}"
+SELECTED_FILE="${DISPLAYED_FILES[$SELECTED_INDEX]:-}"
 
 [ -z "$SELECTED_FILE" ] && exit 1
 

@@ -115,8 +115,15 @@ the index to a different image than the one applied. All three scripts must keep
 enumerating identically — `tests/test-scripts.sh` (section 9) fails if they drift.
 
 Environment overrides (also used by the GUI and the tests): `WALLPAPER_DIR`,
-`WALLPAPER_STATE`, `PLASMA_APPLETSRC`, `WALLPAPER_DRY_RUN=1` (print the chosen
-file instead of applying it).
+`WALLPAPER_STATE`, `WALLPAPER_THUMB_DIR`, `PLASMA_APPLETSRC`,
+`WALLPAPER_DRY_RUN=1` (print the chosen file instead of applying it).
+
+`wallpaper-picker` feeds wofi with `--define dmenu-print_line_num=true`, which
+prints the **0-based** index of the selected line (`wofi`'s `modes/dmenu.c` does
+`uint16_t line_num = 0; … snprintf("%u", line_num++)` over the entries in input
+order). Subtracting 1 there applied the image *above* the clicked one, so the
+number is now used as a direct index into the displayed list — section 10 of the
+test suite clicks lines 0, 3 and the last one against a stubbed `wofi`.
 
 ## Profiles / Профили
 

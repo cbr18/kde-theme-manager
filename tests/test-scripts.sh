@@ -205,9 +205,10 @@ PLASMA_TMP="$TMP_ROOT/plasma-appletsrc"
 rm -rf "$WALL_TMP"
 mkdir -p "$WALL_TMP"
 
-for name in apple.png Zebra.png -dash.jpg 1number.webp Beta.bmp UP.PNG Обои.jpg notes.txt; do
-  touch "$WALL_TMP/$name"
+for name in apple.png Zebra.png -dash.jpg 1number.webp Beta.bmp UP.PNG Обои.jpg; do
+  magick -size 40x30 xc:blue "png:$WALL_TMP/$name"
 done
+touch "$WALL_TMP/notes.txt"
 ln -s apple.png "$WALL_TMP/linked.png"
 
 # Byte order, symlinks followed, .bmp and uppercase extensions accepted.
@@ -313,6 +314,60 @@ if [ -n "$fn_next" ] && [ "$fn_next" = "$fn_prev" ]; then
   ok "wallpaper-next/prev read the current Plasma wallpaper identically"
 else
   fail "plasma_wallpaper() differs between wallpaper-next and wallpaper-prev"
+fi
+
+# --- 10. wallpaper-picker maps wofi's line number to the clicked image --------
+echo "=== Section 10: wallpaper-picker index mapping ==="
+
+STUB_DIR="$TMP_ROOT/stub-bin"
+mkdir -p "$STUB_DIR"
+# wofi with `--define dmenu-print_line_num=true` prints the *0-based* index of
+# the selected line (modes/dmenu.c: line_num starts at 0). This stub answers
+# with the line the test "clicks".
+cat > "$STUB_DIR/wofi" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "${WOFI_CHOICE:-0}"
+STUB
+chmod +x "$STUB_DIR/wofi"
+
+PICK_STATE="$TMP_ROOT/pick-state"
+
+pick() { # line
+  printf '99' > "$PICK_STATE"
+  WOFI_CHOICE="$1" PATH="$STUB_DIR:$PATH" \
+    WALLPAPER_DIR="$WALL_TMP" \
+    WALLPAPER_STATE="$PICK_STATE" \
+    WALLPAPER_THUMB_DIR="$TMP_ROOT/thumbs" \
+    WALLPAPER_DRY_RUN=1 \
+    bash "$WP_BIN/wallpaper-picker"
+}
+
+got="$(basename "$(pick 0)")"
+if [ "$got" = "${EXPECTED[0]}" ] && [ "$(cat "$PICK_STATE")" = "0" ]; then
+  ok "wallpaper-picker: line 0 → 1st image (used to apply line 1 / nothing)"
+else
+  fail "wallpaper-picker: line 0 → ${EXPECTED[0]}, got '$got' state $(cat "$PICK_STATE")"
+fi
+
+got="$(basename "$(pick 3)")"
+if [ "$got" = "${EXPECTED[3]}" ] && [ "$(cat "$PICK_STATE")" = "3" ]; then
+  ok "wallpaper-picker: line 3 → 4th image, cached index 3"
+else
+  fail "wallpaper-picker: line 3 → ${EXPECTED[3]}, got '$got' state $(cat "$PICK_STATE")"
+fi
+
+last=$(( ${#EXPECTED[@]} - 1 ))
+got="$(basename "$(pick "$last")")"
+if [ "$got" = "${EXPECTED[$last]}" ]; then
+  ok "wallpaper-picker: last line → last image"
+else
+  fail "wallpaper-picker: line $last → ${EXPECTED[$last]}, got '$got'"
+fi
+
+if [ -z "$(pick 'some/typed/path.png' 2>/dev/null)" ]; then
+  ok "wallpaper-picker: a typed custom entry is not treated as a position"
+else
+  fail "wallpaper-picker: typed custom entry was applied"
 fi
 
 # --- Summary ------------------------------------------------------------------
