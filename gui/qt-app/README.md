@@ -161,7 +161,7 @@ mypy src/
 # Tests (Python: 73, from gui/qt-app)
 .venv/bin/python -m pytest tests/ -q
 
-# Tests (bash tooling: 79, from the repo root)
+# Tests (bash tooling: 80, from the repo root)
 bash tests/test-scripts.sh
 
 # Static shell analysis (repo root)

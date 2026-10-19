@@ -447,16 +447,25 @@ case "$out" in
   *) fail "launcher message unexpected: $out" ;;
 esac
 
-# A re-install must keep working (and back up the previous tree).
+# A re-install must keep working (and back up the previous tree) without
+# dragging dev artifacts into the backup.
+mkdir -p "$FAKE_HOME/.local/share/kde-theme-manager/.venv" \
+  "$FAKE_HOME/.local/share/kde-theme-manager/src/core/rust_core/target"
 if gui_install >/dev/null 2>&1; then
   ok "re-install succeeds"
 else
   fail "re-install failed"
 fi
-if compgen -G "$FAKE_HOME/.config/theme-profile/backups/deploy-kde-theme-manager-*" >/dev/null; then
+backup_dir="$(compgen -G "$FAKE_HOME/.config/theme-profile/backups/deploy-kde-theme-manager-*" | tail -1)"
+if [ -n "$backup_dir" ] && [ -f "$backup_dir/app/src/__main__.py" ]; then
   ok "re-install backs up the previous app directory"
 else
-  fail "re-install produced no backup"
+  fail "re-install produced no usable backup"
+fi
+if [ -e "$backup_dir/app/.venv" ] || [ -e "$backup_dir/app/src/core/rust_core/target" ]; then
+  fail "backup kept .venv / rust_core target"
+else
+  ok "backup prunes .venv and rust_core target"
 fi
 
 env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
