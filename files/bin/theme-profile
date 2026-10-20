@@ -215,7 +215,11 @@ apply_live_hooks() {
   local source="$PROFILES/$profile"
   local look_and_feel
 
-  look_and_feel="$(kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage "$source/.config/kdeglobals" 2>/dev/null || true)"
+  # Read the value FROM THE PROFILE, not from the live config. The previous
+  # version passed the profile path as an extra positional argument, which made
+  # kreadconfig6 print its --help text — and that text was then written into
+  # kdeglobals as the LookAndFeelPackage name.
+  look_and_feel="$(kreadconfig6 --file "$source/.config/kdeglobals" --group KDE --key LookAndFeelPackage 2>/dev/null || true)"
   if [ -n "$look_and_feel" ]; then
     kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage "$look_and_feel" >/dev/null 2>&1 || true
   fi
@@ -278,6 +282,34 @@ zen_user_pref() {
       exit
     }
   ' "$file" 2>/dev/null || true
+}
+
+# Read a string member from a (possibly JSONC) settings file.
+#   json_nested_value FILE OBJECT MEMBER
+# e.g. json_nested_value ~/.config/zed/settings.json theme mode
+# Trailing commas and comments are tolerated because we only look for the
+# quoted key and strip everything around its value.
+json_nested_value() {
+  local file="$1" object="$2" member="$3"
+
+  awk -v object="$object" -v member="$member" '
+    $0 ~ "^[[:space:]]*\"" object "\"[[:space:]]*:" { in_object=1; next }
+    in_object && /^[[:space:]]*}/ { exit }
+    in_object && $0 ~ "^[[:space:]]*\"" member "\"[[:space:]]*:" {
+      value=$0
+      sub(/^[^:]*:[[:space:]]*"/, "", value)
+      sub(/",?[[:space:]]*$/, "", value)
+      print value
+      exit
+    }
+  ' "$file" 2>/dev/null || true
+}
+
+# First string value of a top-level key in a JSON/JSONC settings file.
+json_key_value() {
+  local file="$1" key="$2"
+
+  sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$file" 2>/dev/null | head -1
 }
 
 stop_plasma_shell_for_restore() {
@@ -369,12 +401,16 @@ status() {
   echo "zen_bg_color_enabled=$(zen_user_pref mod.sameerasw.zen_bg_color_enabled)"
   echo "zen_bg_opacity=$(zen_user_pref mod.sameerasw.zen_bg_opacity)"
   echo "btop_rounded_corners=$(sed -n 's/^rounded_corners = //p' "$HOME/.config/btop/btop.conf" 2>/dev/null || true)"
-  echo "zed_theme_mode=$(awk '/^[[:space:]]*"theme"[[:space:]]*:/ { in_theme=1; next } in_theme && /^[[:space:]]*"mode"[[:space:]]*:/ { sub(/^[[:space:]]*/, ""); print; exit }' "$HOME/.config/zed/settings.json" 2>/dev/null || true)"
-  echo "zed_theme_light=$(awk '/^[[:space:]]*"theme"[[:space:]]*:/ { in_theme=1; next } in_theme && /^[[:space:]]*"light"[[:space:]]*:/ { sub(/^[[:space:]]*/, ""); print; exit }' "$HOME/.config/zed/settings.json" 2>/dev/null || true)"
-  echo "zed_theme_dark=$(awk '/^[[:space:]]*"theme"[[:space:]]*:/ { in_theme=1; next } in_theme && /^[[:space:]]*"dark"[[:space:]]*:/ { sub(/^[[:space:]]*/, ""); print; exit }' "$HOME/.config/zed/settings.json" 2>/dev/null || true)"
-  echo "code_theme=$(rg -n 'workbench.colorTheme' "$HOME/.config/Code/User/settings.json" 2>/dev/null | head -1 | sed 's/^[^:]*:[[:space:]]*//')"
-  echo "cursor_theme=$(rg -n 'workbench.colorTheme' "$HOME/.config/Cursor/User/settings.json" 2>/dev/null | head -1 | sed 's/^[^:]*:[[:space:]]*//')"
-  echo "obsidian_appearance=$(tr -d '\n' < "$HOME/obsidian/vault/.obsidian/appearance.json" 2>/dev/null || true)"
+  echo "zed_theme_mode=$(json_nested_value "$HOME/.config/zed/settings.json" theme mode)"
+  echo "zed_theme_light=$(json_nested_value "$HOME/.config/zed/settings.json" theme light)"
+  echo "zed_theme_dark=$(json_nested_value "$HOME/.config/zed/settings.json" theme dark)"
+  echo "code_theme=$(json_key_value "$HOME/.config/Code/User/settings.json" workbench.colorTheme)"
+  echo "cursor_theme=$(json_key_value "$HOME/.config/Cursor/User/settings.json" workbench.colorTheme)"
+  obsidian_appearance="$(tr -d '\n' < "$HOME/obsidian/vault/.obsidian/appearance.json" 2>/dev/null || true)"
+  if [ "$obsidian_appearance" = "{}" ]; then
+    obsidian_appearance=""
+  fi
+  echo "obsidian_appearance=$obsidian_appearance"
 }
 
 cmd="${1:-}"

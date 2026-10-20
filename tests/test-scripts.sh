@@ -5,6 +5,10 @@
 
 set -euo pipefail
 
+# KConfig tools honour XDG_CONFIG_HOME even when HOME is overridden, so the
+# fake-home tests below would otherwise write into the real user config.
+unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME
+
 PASS=0
 FAIL=0
 
@@ -626,6 +630,60 @@ else
     *"Python core"*) ok "missing Rust core warns about the Python fallback" ;;
     *) fail "missing Rust core produced no warning: $out" ;;
   esac
+fi
+
+
+# --- 13. apply restores LookAndFeelPackage from the profile (not --help) ------
+echo "=== Section 13: apply_live_hooks reads LookAndFeelPackage from the profile ==="
+
+LF_HOME="$TMP_ROOT/lf-home"
+mkdir -p "$LF_HOME/.config/theme-profile" "$LF_HOME/.config"
+cat > "$LF_HOME/.config/kdeglobals" <<'EOF'
+[General]
+ColorScheme=Breeze1
+
+[KDE]
+LookAndFeelPackage=paper
+EOF
+
+MOCK_BIN_LF="$TMP_ROOT/mock-bin-lf"
+mkdir -p "$MOCK_BIN_LF"
+for cmd in systemctl qdbus6 kbuildsycoca6; do
+  cat > "$MOCK_BIN_LF/$cmd" <<'MOCK'
+#!/usr/bin/env bash
+exit 0
+MOCK
+  chmod +x "$MOCK_BIN_LF/$cmd"
+done
+
+if HOME="$LF_HOME" PATH="$MOCK_BIN_LF:$PATH" \
+  "$SCRIPT_DIR/files/bin/theme-profile" save lf-test >/dev/null 2>&1; then
+  ok "save copies the live kdeglobals into the profile"
+else
+  fail "save lf-test failed"
+fi
+
+# Change the live value: applying the profile must restore the profile's one.
+HOME="$LF_HOME" kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage glass
+
+if HOME="$LF_HOME" PATH="$MOCK_BIN_LF:$PATH" \
+  "$SCRIPT_DIR/files/bin/theme-profile" apply lf-test >/dev/null 2>&1; then
+  ok "apply lf-test exits 0 with mocked session commands"
+else
+  fail "apply lf-test failed"
+fi
+
+lf_value="$(HOME="$LF_HOME" kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage)"
+if [ "$lf_value" = "paper" ]; then
+  ok "apply restores LookAndFeelPackage from the profile (paper)"
+else
+  fail "LookAndFeelPackage after apply is '$lf_value' (expected paper)"
+fi
+
+if grep -q "Usage: kreadconfig6" "$LF_HOME/.config/kdeglobals"; then
+  fail "apply wrote kreadconfig6 --help into kdeglobals"
+else
+  ok "apply does not write command help into kdeglobals"
 fi
 
 
