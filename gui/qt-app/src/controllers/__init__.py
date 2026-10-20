@@ -21,6 +21,7 @@ from core.python_core import (
     PythonProfileCore, PythonWallpaperCore, PythonTrackedAppsCore, PythonSettingsCore
 )
 from core import CoreFactory
+from .theme_inspector import ThemeInspectorController
 
 
 # ──────────────────────────────────────────────────────────────
@@ -719,6 +720,7 @@ class MainController(QObject):
         self._wallpaper = WallpaperController(self)
         self._tracked_apps = TrackedAppsController(self)
         self._settings = SettingsController(self)
+        self._theme = ThemeInspectorController(self)
         self._initialized = False
 
         # The settings controller's "available components" cache must read the
@@ -744,6 +746,10 @@ class MainController(QObject):
     def settings(self):
         return self._settings
 
+    @Property(QObject, constant=True)
+    def theme(self):
+        return self._theme
+
     @Slot()
     def initialize(self) -> None:
         """Инициализация всех контроллеров (идемпотентно — второй вызов no-op)."""
@@ -754,6 +760,7 @@ class MainController(QObject):
         self._wallpaper.refresh()
         self._tracked_apps.refresh()
         self._settings.load()
+        self._theme.refresh()
 
 
 # ──────────────────────────────────────────────────────────────
@@ -772,5 +779,6 @@ def register_controllers(engine) -> None:
     engine.rootContext().setContextProperty("wallpaperController", main_ctrl._wallpaper)
     engine.rootContext().setContextProperty("trackedAppsController", main_ctrl._tracked_apps)
     engine.rootContext().setContextProperty("settingsController", main_ctrl._settings)
+    engine.rootContext().setContextProperty("themeInspector", main_ctrl._theme)
     
     return main_ctrl

@@ -41,6 +41,11 @@ Kirigami.ApplicationWindow {
     // around before committing.
     property string selectedProfile: ""
 
+    // Deep link used by the dev screenshot harness (and available to the tray).
+    function openThemePage() {
+        pageStack.layers.push(Qt.resolvedUrl("pages/ThemePage.qml"))
+    }
+
     // Last active profile we observed. Used to distinguish "the user changed
     // the selection" from "the controller just refreshed the active profile".
     property string _lastActive: ""
@@ -109,6 +114,11 @@ Kirigami.ApplicationWindow {
                 text: qsTr("Profiles")
                 icon.name: "preferences-desktop-theme"
                 onTriggered: pageStack.layers.clear()
+            },
+            Kirigami.Action {
+                text: qsTr("Theme")
+                icon.name: "preferences-desktop-color"
+                onTriggered: pageStack.layers.push(Qt.resolvedUrl("pages/ThemePage.qml"))
             },
             Kirigami.Action {
                 text: qsTr("Settings")
@@ -290,6 +300,10 @@ Kirigami.ApplicationWindow {
                                 diffDialog.profileA = profileName
                                 diffDialog.profileB = profileController.activeProfile
                                 diffDialog.open()
+                            }
+                            onInspectClicked: function(profileName) {
+                                themeInspector.setScope("profile:" + profileName)
+                                pageStack.layers.push(Qt.resolvedUrl("pages/ThemePage.qml"))
                             }
                             onDeleteClicked: function(profileName) {
                                 confirmDialog.targetProfile = profileName

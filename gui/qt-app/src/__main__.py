@@ -293,6 +293,15 @@ def main() -> int:
     main_window = engine.rootObjects()[0]
     register_system_tray(engine, main_window, main_controller)
 
+    # Dev helper for visual smoke tests: open the Theme inspector immediately.
+    if os.environ.get("KTM_OPEN_THEME") == "1":
+        from PySide6.QtCore import QMetaObject
+
+        QTimer.singleShot(
+            0,
+            lambda: QMetaObject.invokeMethod(main_window, "openThemePage"),
+        )
+
     # Apply theme synchronously before showing (avoid light flash)
     # sync_theme was triggered during initialize(); force-apply now
     # to ensure glass/paper theme is active before the window appears

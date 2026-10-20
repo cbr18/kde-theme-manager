@@ -172,6 +172,163 @@ class SettingsCore(ABC):
         """Дефолтные настройки."""
 
 
+# ──────────────────────────────────────────────────────────────
+# Theme Inspector (экран «Тема»)
+# ──────────────────────────────────────────────────────────────
+
+@dataclass(frozen=True, slots=True)
+class Choice:
+    """Одно значение enum-поля (например, установленная цветовая схема)."""
+    value: str
+    label: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.label:
+            object.__setattr__(self, "label", self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class ThemeSection:
+    """Раздел инспектора темы."""
+    id: str
+    title: str
+    icon: str = ""
+    description: str = ""
+    field_count: int = 0
+    issue_count: int = 0
+    summary: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ThemeFieldValue:
+    """Прочитанное значение одного параметра темы."""
+    id: str
+    section: str
+    label: str
+    type: str
+    raw: object
+    display: str
+    is_default: bool = False
+    differs_from_profile: bool = False
+    profile_raw: object = None
+    profile_display: str = ""
+    badge: str = "live"
+    description: str = ""
+    file: str = ""
+    group: str = ""
+    key: str = ""
+    choices: tuple[Choice, ...] = field(default_factory=tuple)
+    min: Optional[float] = None
+    max: Optional[float] = None
+    step: Optional[float] = None
+    suffix: str = ""
+    tracked_in_profile: bool = True
+    advanced: bool = False
+    confirm: bool = False
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "section": self.section,
+            "label": self.label,
+            "type": self.type,
+            "value": self.raw,
+            "display": self.display,
+            "isDefault": self.is_default,
+            "differs": self.differs_from_profile,
+            "profileValue": self.profile_raw,
+            "profileDisplay": self.profile_display,
+            "badge": self.badge,
+            "description": self.description,
+            "file": self.file,
+            "group": self.group,
+            "key": self.key,
+            "choices": [
+                {"value": c.value, "label": c.label} for c in self.choices
+            ],
+            "min": self.min,
+            "max": self.max,
+            "step": self.step,
+            "suffix": self.suffix,
+            "trackedInProfile": self.tracked_in_profile,
+            "advanced": self.advanced,
+            "confirm": self.confirm,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ThemeIssue:
+    """Проблема, найденная валидатором темы."""
+    severity: str          # "error" | "warning" | "info"
+    field_id: str
+    message: str
+    fix_hint: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "severity": self.severity,
+            "fieldId": self.field_id,
+            "message": self.message,
+            "fixHint": self.fix_hint,
+        }
+
+
+class ThemeCore(ABC):
+    """Инспектор темы: чтение, запись и валидация параметров оформления.
+
+    ``scope`` — ``"live"`` (текущая система; запись разрешена) или
+    ``"profile:<name>"`` (снимок профиля; только чтение).
+    """
+
+    @abstractmethod
+    def sections(self, scope: str = "live") -> list[ThemeSection]:
+        """Разделы инспектора с кратким summary."""
+
+    @abstractmethod
+    def fields(self, section: str, scope: str = "live") -> list[dict]:
+        """Поля раздела (QML-ready dicts)."""
+
+    @abstractmethod
+    def get(self, field_id: str, scope: str = "live") -> Optional[dict]:
+        """Одно поле по id."""
+
+    @abstractmethod
+    def choices(self, field_id: str) -> list[Choice]:
+        """Доступные значения для enum-поля."""
+
+    @abstractmethod
+    def font_families(self) -> list[str]:
+        """Семейства шрифтов, установленные в системе."""
+
+    @abstractmethod
+    def validate(self) -> list[ThemeIssue]:
+        """Проверить значения на существование целей и конфликты."""
+
+    @abstractmethod
+    def search(self, query: str, scope: str = "live") -> list[dict]:
+        """Поиск по label/id/ключу/значению."""
+
+    @abstractmethod
+    def set_value(self, field_id: str, value: object) -> Result:
+        """Записать значение в live-конфиг и применить."""
+
+    @abstractmethod
+    def reset(self, field_id: str, to: str = "default") -> Result:
+        """Сбросить поле к дефолту или к значению активного профиля."""
+
+    @abstractmethod
+    def undo(self) -> Result:
+        """Отменить последнее изменение сессии."""
+
+    @abstractmethod
+    def revert(self) -> Result:
+        """Вернуть все файлы сессии к снимку."""
+
+    @abstractmethod
+    def session_changes(self) -> int:
+        """Сколько изменений сделано в текущей сессии."""
+
+
 @dataclass(frozen=True, slots=True)
 class AppSettings:
     """Настройки приложения (user preferences)."""
@@ -257,6 +414,7 @@ class CoreFactory:
     _wallpaper_core: Optional[WallpaperCore] = None
     _tracked_apps_core: Optional[TrackedAppsCore] = None
     _settings_core: Optional[SettingsCore] = None
+    _theme_core: Optional["ThemeCore"] = None
 
     _backend: str = "python"          # фактически используемый
 
@@ -390,9 +548,24 @@ class CoreFactory:
         return cls._settings_core
 
     @classmethod
+    def theme_core(cls) -> "ThemeCore":
+        """Инспектор темы.
+
+        Всегда Python-реализация: это чтение/запись конфигов и D-Bus-хуки,
+        где Rust не даёт выигрыша. Контракт отдельный от ``--core`` и
+        задокументирован в TZ; при стабилизации схемы можно добавить FFI.
+        """
+        if cls._theme_core is None:
+            from .theme_core import PythonThemeCore
+
+            cls._theme_core = PythonThemeCore()
+        return cls._theme_core
+
+    @classmethod
     def reset(cls) -> None:
         """Сброс для тестов или переинициализации."""
         cls._profile_core = None
         cls._wallpaper_core = None
         cls._tracked_apps_core = None
         cls._settings_core = None
+        cls._theme_core = None

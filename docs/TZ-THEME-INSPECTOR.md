@@ -1,6 +1,6 @@
 # TZ: Theme Inspector — экран «Тема»
 
-> **Статус**: готова к работе
+> **Статус**: Phase 0–2 реализованы, Phase 3 — частично (см. §3a)
 > **Приоритет**: P1 (после текущих багфиксов)
 > **Оценка**: Phase 0 — 1 ч · Phase 1 — 1.5–2 дня · Phase 2 — 2–3 дня · Phase 3 — ~2 дня
 > **Дизайн и обоснование**: [THEME_INSPECTOR.md](THEME_INSPECTOR.md)
@@ -21,7 +21,7 @@
 
 **Входит:**
 - новая страница `Theme` в drawer;
-- read-only инспектор ~60 полей в 6 секциях;
+- read-only инспектор 69 полей в 5 секциях;
 - валидация («Theme Doctor»);
 - редактирование live-значений с мгновенным применением, Undo и снимком сессии;
 - поиск по полям, diff live↔profile, ссылки в System Settings и «Open file».
@@ -38,10 +38,52 @@
 |---|---|
 | Схема полей | `gui/qt-app/src/core/theme_schema.py` |
 | Ядро инспектора (read/write/hooks/validate) | `gui/qt-app/src/core/theme_core.py` |
-| Контракты | `gui/qt-app/src/core/protocol.py` (`ThemeCore`, `ThemeSection`, `ThemeFieldInfo`, `ThemeValue`, `ThemeIssue`, `Choice`) |
-| Контроллер | `gui/qt-app/src/controllers/__init__.py` (`ThemeController`) |
-| UI | `qml/pages/ThemePage.qml`, `qml/pages/ThemeSectionPage.qml`, `qml/Components/ThemeSectionCard.qml`, `ThemeFieldRow.qml`, `ColorSwatch.qml`, `ValueBadge.qml` |
-| Тесты | `gui/qt-app/tests/test_theme_inspector.py` |
+| Контракты | `gui/qt-app/src/core/protocol.py` (`ThemeCore`, `ThemeSection`, `ThemeFieldValue`, `ThemeIssue`, `Choice`) |
+| Контроллер | `gui/qt-app/src/controllers/theme_inspector.py` (`ThemeInspectorController`, context property `themeInspector`) |
+| UI | `qml/pages/ThemePage.qml`, `qml/pages/ThemeSectionCard.qml`, `qml/pages/ThemeSectionFields.qml`, `qml/pages/ThemeFieldRow.qml` |
+| Тесты | `gui/qt-app/tests/test_theme_inspector.py`, `tests/test-scripts.sh` (Section 13) |
+
+---
+
+## 3a. Статус реализации (2026-10-20)
+
+Реализовано:
+
+- **Phase 0**: `apply_live_hooks` читает L&F из профиля правильным вызовом
+  `kreadconfig6`; live и профиль `glass` восстановлены (`LookAndFeelPackage=glass`);
+  `theme-profile status` парсит Zed/VS Code/Cursor/Obsidian без обрывков JSON;
+  регрессионный тест в `tests/test-scripts.sh` (Section 13). Тесты дополнительно
+  изолированы от `XDG_CONFIG_HOME` — раньше `HOME=...` не защищал реальный конфиг.
+- **Курсор (T0.4)**: остаётся вне профилей (`profile_tracked=False`), потому что
+  `kcminputrc` содержит не только тему курсора, но и скорость/инерцию мыши.
+  В инспекторе курсор и размер редактируются live.
+- **Phase 1**: схема на 69 полей, 5 секций + карточка Advanced; чтение KConfig,
+  JSON/JSONC, TOML, kitty, user.js; choices из файловой системы; diff live↔profile;
+  валидация (несуществующие схемы/темы/шрифты, битый L&F, конфликт blur);
+  поиск по label/id/ключу/русским ключевым словам; страница Theme в drawer и
+  кнопка Inspect на карточке профиля.
+- **Phase 2**: запись через `kwriteconfig6` и точечные патчеры (JSONC сохраняет
+  комментарии и trailing comma); snapshot в `backups/inspector-<ts>/`; Undo/Revert;
+  ColorDialog, слайдеры с дебаунсом, ComboBox, font family (TextField)+size, confirm для
+  L&F/Plasma theme/icons; hooks `kwin`, `kwin effect`, `kbuildsycoca`, `kitty`.
+- **Phase 3 (частично)**: глобальный поиск, «Restore field from profile», кнопка
+  Fix в Validation, экспорт снимка в JSON, ссылки на KCM, per-app поля.
+  Rust-паритет не делался: `CoreFactory.theme_core()` всегда Python — это
+  задокументировано в докстринге и здесь.
+
+Отличия от первоначального ТЗ:
+
+- Разделы раскрываются аккордеоном на одной странице, а не отдельной
+  `ThemeSectionPage.qml` — так проще возвращаться к обзору и работает поиск.
+- «Raw-таблица по файлам» не делалась: вместо неё экспорт JSON и кнопка
+  «Open config folder». Сырые файлы остаются в System Settings/редакторе.
+- Нет Ctrl+Z и проверки mtime перед записью: Undo/Revert доступны кнопками;
+  внешние изменения подхватываются при следующем Refresh. Это осознанный
+  компромисс, чтобы не плодить диалоги в MVP.
+- FontDialog заменён на TextField семейства + SpinBox размера: QtQuick.Dialogs
+  FontDialog в PySide6/Kirigami выглядит чужеродно, а ComboBox на 800+ семейств
+  в Qt 6.12 синхронно строит меню и подвешивает страницу. Текстовое поле
+  сохраняет контракт «family + size» и не требует прогрева списка.
 
 ---
 
@@ -153,12 +195,12 @@ ThemeField(
 
 ### T1.5. Контракт и контроллер
 
-- [ ] `ThemeCore` ABC в `protocol.py`:
-  `sections()`, `fields(section)`, `value(field_id, scope)`, `choices(field_id)`, `validate()`, `set_value()`, `reset()`, `snapshot()`, `revert()`.
-- [ ] `CoreFactory.theme_core()` → Python-реализация (не зависит от `--core`; задокументировать в Settings).
-- [ ] `ThemeController` (QObject): `Properties` секций/полей, сигналы `busyChanged`, `valueChanged(fieldId)`, `toastRequested(text)`.
-- [ ] Регистрация в `register_controllers(engine)`; держать Python-ссылку (иначе QML видит `null`).
-- [ ] Async-обёртки: чтение и запись не блокируют GUI.
+- [x] `ThemeCore` ABC в `protocol.py`:
+  `sections()`, `fields(section)`, `get(field_id, scope)`, `choices(field_id)`, `validate()`, `set_value()`, `reset()`, `undo()`, `revert()`, `session_changes()`.
+- [x] `CoreFactory.theme_core()` → Python-реализация (не зависит от `--core`; отмечено в докстринге и §3a).
+- [x] `ThemeInspectorController` (QObject, context property `themeInspector`): `sections`, `issues`, `scope`, `scopes`, `readOnly`, `busy`, `sessionChanges`, `accentColor`, `modifiedCount`; сигналы `sectionsChanged`, `fieldsChanged`, `issuesChanged`, `scopeChanged`, `busyChanged`, `toast(text, ok)`.
+- [x] Регистрация в `register_controllers(engine)`; Python-ссылка живёт в `MainController._theme`.
+- [x] Async-обёртки: записи/undo/revert идут через `QThreadPool`, GUI не блокируется.
 
 ### T1.6. UI
 
@@ -248,35 +290,45 @@ Apps: kitty opacity/blur (live), alacritty opacity/blur, btop theme/rounded corn
 ```python
 @dataclass(frozen=True)
 class ThemeSection:
-    id: str; title: str; summary: str; issue_count: int
+    id: str; title: str; icon: str; description: str
+    summary: str; field_count: int; issue_count: int
 
 @dataclass(frozen=True)
-class ThemeFieldInfo:
+class ThemeFieldValue:
     id: str; section: str; label: str; type: str
     value: object; display: str; default: object | None
-    is_default: bool; is_modified: bool
+    is_default: bool; differs: bool; profile_value: object
+    profile_display: str
     badge: str            # live | new | app | shell | warning | error
-    choices: tuple[Choice, ...]
-    file: str; key: str; description: str
+    choices: list[Choice]
+    file: str; group: str; key: str; description: str
+    min: float | None; max: float | None; step: float | None
+    suffix: str
+    tracked_in_profile: bool; advanced: bool; confirm: bool
+
+    # QML получает не dataclass, а dict из to_dict()
 
 @dataclass(frozen=True)
 class ThemeIssue:
     severity: str         # error | warning | info
-    field_id: str; message: str; fix: str | None
+    field_id: str; message: str; fix_hint: str
 
 class ThemeCore(ABC):
-    def sections(self) -> list[ThemeSection]: ...
-    def fields(self, section: str, scope: str = "live") -> list[ThemeFieldInfo]: ...
-    def value(self, field_id: str, scope: str = "live") -> ThemeFieldInfo: ...
+    def sections(self, scope: str = "live") -> list[ThemeSection]: ...
+    def fields(self, section: str, scope: str = "live") -> list[dict]: ...
+    def get(self, field_id: str, scope: str = "live") -> dict | None: ...
     def choices(self, field_id: str) -> list[Choice]: ...
+    def font_families(self) -> list[str]: ...
     def validate(self) -> list[ThemeIssue]: ...
+    def search(self, query: str, scope: str = "live") -> list[dict]: ...
     def set_value(self, field_id: str, value: object) -> Result: ...
     def reset(self, field_id: str, to: str = "default") -> Result: ...
-    def snapshot(self) -> Result: ...
+    def undo(self) -> Result: ...
     def revert(self) -> Result: ...
+    def session_changes(self) -> int: ...
 ```
 
-`scope` = `"live"` или `"profile:<name>"` (для последнего `set_value` → `Result.err("profile scope is read-only")`).
+`scope` = `"live"` или `"profile:<name>"` (для последнего запись отклоняется контроллером: «Profile snapshots are read-only»).
 
 ---
 
@@ -308,13 +360,14 @@ scripts/install-kde-theme-manager.sh
 
 ## 10. Definition of Done
 
-- [ ] Phase 0 смержен, испорченный L&F восстановлен, есть регрессионный тест.
-- [ ] Theme-страница открывается из drawer и с карточки профиля.
-- [ ] Read-only инспектор: ≥50 полей, 6 секций, поиск, diff live↔profile.
-- [ ] Validation находит битые значения (проверено на реальном кейсе L&F).
-- [ ] Редактирование: accent, Kvantum, Klassy radius/opacity, blur, translucency, kitty opacity.
-- [ ] Undo/Revert работают; после тестов ни один реальный конфиг не изменён (temp HOME).
-- [ ] `pytest`, `test-scripts.sh`, `shellcheck` — зелёные; 0 QML-предупреждений offscreen.
+- [x] Phase 0 смержен, испорченный L&F восстановлен, есть регрессионный тест.
+- [x] Theme-страница открывается из drawer и с карточки профиля.
+- [x] Read-only инспектор: ≥50 полей, 5 секций + Advanced, поиск, diff live↔profile.
+- [x] Validation находит битые значения (проверено на реальном кейсе L&F и на синтетическом `$HOME`).
+- [x] Редактирование: accent, Kvantum, Klassy radius/opacity, blur, translucency, kitty opacity, шрифты, Zed/VS Code/Cursor/Obsidian.
+- [x] Undo/Revert работают; тесты используют temp HOME и не трогают реальные конфиги.
+- [x] `pytest` (146 в GUI-наборе), `test-scripts.sh`, `shellcheck` — зелёные.
+- [ ] 0 QML-предупреждений offscreen: остаётся одно предупреждение Kirigami StackView при программном push в dev-хуке (`KTM_OPEN_THEME`); при обычном клике не воспроизводится.
 - [ ] README + `docs/CURRENT_APP.md` + `docs/ROADMAP.md` обновлены.
 - [ ] Коммит и пуш в `origin/main`.
 

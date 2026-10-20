@@ -1,0 +1,405 @@
+"""Controller for the Theme Inspector screen.
+
+The inspector reads live KDE/app configuration through ``ThemeCore`` and exposes
+QML-ready dicts. Writes are always applied to the *live* system and run on the
+thread pool; profile snapshots stay read-only.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from datetime import datetime
+from pathlib import Path
+from typing import Callable, Optional
+
+from PySide6.QtCore import (
+    Property,
+    QObject,
+    QRunnable,
+    QThreadPool,
+    QUrl,
+    Signal,
+    Slot,
+)
+
+from core import CoreFactory
+from core.protocol import ThemeCore
+from core.theme_schema import FIELD_BY_ID, SECTIONS
+
+
+# ──────────────────────────────────────────────────────────────
+# Local async helper (kept private to avoid a package import cycle)
+# ──────────────────────────────────────────────────────────────
+
+class _Signals(QObject):
+    finished = Signal(bool, str)
+
+
+class _Worker(QRunnable):
+    def __init__(self, func: Callable[[], tuple[bool, str]], signals: _Signals) -> None:
+        super().__init__()
+        self._func = func
+        self._signals = signals
+
+    def run(self) -> None:
+        try:
+            success, message = self._func()
+        except Exception as exc:  # noqa: BLE001 - surface to the UI
+            success, message = False, str(exc)
+        self._signals.finished.emit(bool(success), message)
+
+
+def _run(owner: QObject, func: Callable[[], tuple[bool, str]],
+         done: Callable[[bool, str], None]) -> None:
+    signals = _Signals(owner)
+    signals.finished.connect(done)
+    signals.finished.connect(signals.deleteLater)
+    QThreadPool.globalInstance().start(_Worker(func, signals))
+
+
+# ──────────────────────────────────────────────────────────────
+# Controller
+# ──────────────────────────────────────────────────────────────
+
+class ThemeInspectorController(QObject):
+    """Тема: обзор, разделы, валидация и live-правки."""
+
+    sectionsChanged = Signal()
+    fieldsChanged = Signal()
+    issuesChanged = Signal()
+    scopeChanged = Signal()
+    busyChanged = Signal()
+    toast = Signal(str, bool)          # message, success
+
+    def __init__(self, parent: Optional[QObject] = None) -> None:
+        super().__init__(parent)
+        self._core: ThemeCore = CoreFactory.theme_core()
+        self._scope = "live"
+        self._sections: list[dict] = []
+        self._issues: list[dict] = []
+        self._busy = False
+        self._accent = ""
+        self._modified = 0
+        self.refresh()
+
+    # ── properties ────────────────────────────────────────────
+
+    @Property(list, notify=sectionsChanged)
+    def sections(self) -> list:
+        return self._sections
+
+    @Property(list, notify=issuesChanged)
+    def issues(self) -> list:
+        return self._issues
+
+    @Property(bool, notify=busyChanged)
+    def busy(self) -> bool:
+        return self._busy
+
+    @Property(str, notify=scopeChanged)
+    def scope(self) -> str:
+        return self._scope
+
+    @Property(list, notify=scopeChanged)
+    def scopes(self) -> list:
+        root = Path.home() / ".config" / "theme-profile" / "profiles"
+        try:
+            names = sorted(p.name for p in root.iterdir() if p.is_dir())
+        except OSError:
+            names = []
+        return ["live"] + [f"profile:{name}" for name in names]
+
+    @Property(str, notify=sectionsChanged)
+    def activeProfile(self) -> str:
+        path = Path.home() / ".config" / "theme-profile" / "active-profile"
+        try:
+            return path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+
+    @Property(str, notify=sectionsChanged)
+    def accentColor(self) -> str:
+        return self._accent or "#808080"
+
+    @Property(int, notify=sectionsChanged)
+    def modifiedCount(self) -> int:
+        return self._modified
+
+    @Property(int, notify=issuesChanged)
+    def issueCount(self) -> int:
+        return len(self._issues)
+
+    @Property(int, notify=sectionsChanged)
+    def sessionChanges(self) -> int:
+        return self._core.session_changes()
+
+    @Property(bool, notify=scopeChanged)
+    def readOnly(self) -> bool:
+        return self._scope != "live"
+
+    # ── data ──────────────────────────────────────────────────
+
+    @Slot()
+    def refresh(self) -> None:
+        titles = {section.id: section.title for section in SECTIONS}
+        sections: list[dict] = []
+        modified = 0
+
+        for section in self._core.sections(self._scope):
+            fields = self._core.fields(section.id, self._scope)
+            modified += sum(1 for item in fields if item["differs"])
+            sections.append({
+                "id": section.id,
+                "title": section.title,
+                "icon": section.icon,
+                "description": section.description,
+                "fieldCount": section.field_count,
+                "summary": section.summary,
+                "issueCount": 0,
+            })
+
+        issues: list[dict] = []
+        if self._scope == "live":
+            for issue in self._core.validate():
+                item = issue.to_dict()
+                field = FIELD_BY_ID.get(issue.field_id)
+                item["section"] = field.section if field else ""
+                item["sectionTitle"] = titles.get(item["section"], "")
+                issues.append(item)
+
+        per_section: dict[str, int] = {}
+        for issue in issues:
+            per_section[issue["section"]] = per_section.get(issue["section"], 0) + 1
+        for section in sections:
+            section["issueCount"] = per_section.get(section["id"], 0)
+
+        accent = self._core.get("accent_color", self._scope)
+        self._accent = accent["display"] if accent else ""
+
+        self._sections = sections
+        self._issues = issues
+        self._modified = modified
+        self.sectionsChanged.emit()
+        self.fieldsChanged.emit()
+        self.issuesChanged.emit()
+
+    @Slot(str, result=list)
+    def fieldsFor(self, section: str) -> list:
+        return self._core.fields(section, self._scope)
+
+    @Slot(str, result=list)
+    def search(self, query: str) -> list:
+        return self._core.search(query, self._scope)
+
+    @Slot(result=list)
+    def fontFamilies(self) -> list:
+        return self._core.font_families()
+
+    @Slot(str, result=str)
+    def sectionTitle(self, section: str) -> str:
+        for item in SECTIONS:
+            if item.id == section:
+                return item.title
+        return section
+
+    # ── scope ─────────────────────────────────────────────────
+
+    @Slot(str)
+    def setScope(self, scope: str) -> None:
+        if scope != "live" and not scope.startswith("profile:"):
+            return
+        if scope == self._scope:
+            return
+        self._scope = scope
+        self.scopeChanged.emit()
+        self.refresh()
+
+    # ── writes ────────────────────────────────────────────────
+
+    def _set_busy(self, value: bool) -> None:
+        if self._busy != value:
+            self._busy = value
+            self.busyChanged.emit()
+
+    def _write(self, field_id: str, value: object) -> None:
+        if self._scope != "live":
+            self.toast.emit("Profile snapshots are read-only", False)
+            return
+        if self._busy:
+            self.toast.emit("Another change is still being applied", False)
+            return
+
+        def work() -> tuple[bool, str]:
+            result = self._core.set_value(field_id, value)
+            return result.success, result.message
+
+        def done(success: bool, message: str) -> None:
+            self._set_busy(False)
+            self.toast.emit(message, success)
+            self.refresh()
+
+        self._set_busy(True)
+        _run(self, work, done)
+
+    @Slot(str, str)
+    def setText(self, field_id: str, value: str) -> None:
+        self._write(field_id, value)
+
+    @Slot(str, bool)
+    def setBool(self, field_id: str, value: bool) -> None:
+        self._write(field_id, value)
+
+    @Slot(str, int)
+    def setInt(self, field_id: str, value: int) -> None:
+        self._write(field_id, value)
+
+    @Slot(str, float)
+    def setFloat(self, field_id: str, value: float) -> None:
+        self._write(field_id, value)
+
+    @Slot(str, str)
+    def setColor(self, field_id: str, value: str) -> None:
+        self._write(field_id, value)
+
+    @Slot(str, str, int)
+    def setFont(self, field_id: str, family: str, size: int) -> None:
+        self._write(field_id, {"family": family, "size": size})
+
+    @Slot(str)
+    def resetToProfile(self, field_id: str) -> None:
+        if self._scope != "live":
+            self.toast.emit("Profile snapshots are read-only", False)
+            return
+
+        def work() -> tuple[bool, str]:
+            result = self._core.reset(field_id, "profile")
+            return result.success, result.message
+
+        def done(success: bool, message: str) -> None:
+            self._set_busy(False)
+            self.toast.emit(message, success)
+            self.refresh()
+
+        self._set_busy(True)
+        _run(self, work, done)
+
+    @Slot()
+    def undo(self) -> None:
+        def work() -> tuple[bool, str]:
+            result = self._core.undo()
+            return result.success, result.message
+        def done(success: bool, message: str) -> None:
+            self._set_busy(False)
+            self.toast.emit(message, success)
+            self.refresh()
+
+        self._set_busy(True)
+        _run(self, work, done)
+
+    @Slot()
+    def revertAll(self) -> None:
+        def work() -> tuple[bool, str]:
+            result = self._core.revert()
+            return result.success, result.message
+
+        def done(success: bool, message: str) -> None:
+            self._set_busy(False)
+            self.toast.emit(message, success)
+            self.refresh()
+
+        self._set_busy(True)
+        _run(self, work, done)
+
+    @Slot(str)
+    def applyFix(self, field_id: str) -> None:
+        """Pick a safe value for a validation issue and write it live."""
+        if self._scope != "live":
+            self.toast.emit("Profile snapshots are read-only", False)
+            return
+
+        if field_id == "blur_enabled":
+            value: object = False
+            target = "legacy_blur"
+        else:
+            field = FIELD_BY_ID.get(field_id)
+            if field is None:
+                return
+            target = field_id
+            value = None
+            installed = [choice.value for choice in self._core.choices(field_id)]
+            active = self.activeProfile
+            profile = self._core.get(field_id, f"profile:{active}") if active else None
+            profile_value = profile["value"] if profile else None
+            if profile_value in installed:
+                value = profile_value
+            elif installed:
+                value = installed[0]
+            elif field.type == "font":
+                value = {"family": "Noto Sans", "size": 10}
+            elif field.type == "bool":
+                value = False
+
+        if value is None:
+            self.toast.emit(f"No safe fix for {field_id}", False)
+            return
+        self._write(target, value)
+
+    @Slot(str)
+    def exportJson(self, path: str) -> None:
+        """Write the current scope to a JSON snapshot (raw + display values)."""
+        if not path:
+            return
+        local = QUrl(path).toLocalFile() if path.startswith("file:") else path
+        target = Path(local)
+        data = {
+            "generatedAt": datetime.now().isoformat(timespec="seconds"),
+            "scope": self._scope,
+            "activeProfile": self.activeProfile,
+            "sections": {},
+        }
+        for section in self._sections:
+            data["sections"][section["id"]] = {
+                item["id"]: {
+                    "value": item["value"],
+                    "display": item["display"],
+                }
+                for item in self._core.fields(section["id"], self._scope)
+            }
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            self.toast.emit(f"Export failed: {exc}", False)
+            return
+        self.toast.emit(f"Exported theme snapshot to {target}", True)
+
+    # ── external tools ────────────────────────────────────────
+
+    @Slot(str)
+    def openSystemSettings(self, module: str) -> None:
+        if not module:
+            return
+        try:
+            subprocess.Popen(["kcmshell6", module])
+        except OSError as exc:
+            self.toast.emit(str(exc), False)
+
+    @Slot(str)
+    def openFile(self, relative: str) -> None:
+        if not relative:
+            return
+        path = Path(relative)
+        if not path.is_absolute():
+            path = Path.home() / relative
+        target = path if path.is_dir() else path.parent
+        try:
+            subprocess.Popen(["xdg-open", str(target)])
+        except OSError as exc:
+            self.toast.emit(str(exc), False)
+
+
+__all__ = ["ThemeInspectorController"]

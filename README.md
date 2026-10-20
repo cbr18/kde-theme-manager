@@ -13,6 +13,7 @@
 - [Installation](#installation--установка)
 - [Usage](#usage--использование)
 - [Profiles](#profiles--профили)
+- [Theme Inspector](#theme-inspector--инспектор-темы)
 - [Update](#update--обновление)
 - [Uninstall](#uninstall--удаление)
 - [Rollback & Recovery](#rollback--восстановление)
@@ -177,6 +178,35 @@ test suite clicks lines 0, 3 and the last one against a stubbed `wofi`.
 - **`paper`** — светлая/solid тема, без прозрачностей
 
 Profiles live in `~/.config/theme-profile/profiles/`.
+
+## Theme Inspector / Инспектор темы
+
+The GUI's **Theme** page (drawer → *Theme*, or the magnifier-style **Inspect**
+button on a profile card) answers three questions without opening a config file:
+
+- **What is my theme made of?** — 69 fields in five sections: Colors,
+  Typography, Windows & Effects, Desktop & Assets, Applications.
+- **How does the active profile differ from live?** — switch the scope combo to
+  any profile; changed fields get an accent dot and the profile value in the
+  tooltip.
+- **Is anything broken?** — *Validation* flags missing colour schemes,
+  look-and-feel/icon/Kvantum themes, fonts, a broken `LookAndFeelPackage`, and
+  the `blurEnabled` + `better_blur_dxEnabled` conflict. **Fix** picks the value
+  stored in the active profile (or an installed fallback).
+
+Live values are editable (color picker, sliders, combo boxes, font family/size,
+switches). Every write runs off the GUI thread and applies immediately — no
+draft/Apply step. **Undo** reverts the last field, **Revert all** restores every
+file touched in this session. Before the first write, originals are copied to
+`~/.config/theme-profile/backups/inspector-<timestamp>/`.
+
+Heavy components (Plasma theme, look-and-feel, icons) ask for confirmation
+because they can replace the wallpaper or panel layout. Profile scopes are
+read-only; deep settings stay in System Settings via `kcmshell6` links. The
+inspector always uses the Python core, even when the app runs with `--core rust`.
+
+Tests use a temporary `$HOME`; `KTM_THEME_NO_APPLY=1` suppresses external
+commands (D-Bus, `plasma-apply-*`, `kvantummanager`) for dry runs.
 
 ## Update / Обновление
 

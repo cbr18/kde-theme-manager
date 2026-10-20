@@ -154,6 +154,20 @@ wallpaper-prev                   # предыдущие обои
 
 ---
 
+## GUI: Theme Inspector
+
+Qt/QML-приложение (`gui/qt-app/`) уже ставится установщиком рядом с Bash-скриптами. Помимо профилей и обоев в нём есть страница **Theme**:
+
+- 69 live-полей в секциях Colors, Typography, Windows & Effects, Desktop & Assets, Applications + Advanced;
+- переключатель scope `Live | <profile>` и diff по полям;
+- валидация (схемы, L&F, иконки, Kvantum, шрифты, конфликт blur) с кнопкой **Fix**;
+- редактирование с мгновенным применением, Undo/Revert и снимком в `~/.config/theme-profile/backups/inspector-<ts>/`;
+- экспорт снимка в JSON, ссылки в `kcmshell6`, открытие папки конфигов.
+
+Инспектор всегда работает на Python-ядре (`CoreFactory.theme_core()`), независимо от `--core`. Подробности: [THEME_INSPECTOR.md](THEME_INSPECTOR.md), ТЗ: [TZ-THEME-INSPECTOR.md](TZ-THEME-INSPECTOR.md).
+
+---
+
 ## Известные ограничения
 
 1. **Обои не в профиле** — `theme-profile save/apply` не сохраняет/не применяет обои. Обои управляются отдельно через `wallpaper-*` скрипты.

@@ -154,6 +154,16 @@ Kirigami.AbstractCard {
             }
 
             Button {
+                icon.name: "preferences-desktop-theme"
+                flat: true
+                ToolTip.text: qsTr("Inspect the theme values stored in this profile")
+                ToolTip.visible: hovered
+                Accessible.name: ToolTip.text
+                Accessible.role: Accessible.Button
+                onClicked: card.inspectClicked(card.profileName)
+            }
+
+            Button {
                 icon.name: "edit-delete"
                 flat: true
                 visible: !card.profileIsActive
@@ -187,5 +197,6 @@ Kirigami.AbstractCard {
     signal applyClicked(string profileName)
     signal previewClicked(string profileName)
     signal diffClicked(string profileName)
+    signal inspectClicked(string profileName)
     signal deleteClicked(string profileName)
 }

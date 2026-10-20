@@ -11,6 +11,7 @@
 - [x] Controllers: Profile, Wallpaper, TrackedApps, Settings, Main
 - [x] ThemeController: dogfooding (glass/paper/dark/light/system)
 - [x] QML UI: MainPage (профили + обои), SettingsPage (гранулярные чекбоксы)
+- [x] Theme Inspector: страница Theme, 69 полей, diff live↔profile, валидация, live-правки с Undo/Revert, экспорт JSON, ссылки в KCM
 - [x] Components: ProfileCardDelegate, ProfileRadioButton, ComponentCategoryGroup, ComponentCheckbox
 - [x] Install/Update/Uninstall скрипты для Qt app
 - [x] pyproject.toml, README, .gitignore

@@ -12,7 +12,7 @@
 2. **Редактировать — да, но только «Live»** (текущую систему), а профили остаются снимками. Профиль можно смотреть и сравнивать, но не «править вслепую».
 3. **Применять сразу + Undo**, как в System Settings, а не «черновик → Save». Для тяжёлых операций (L&F, Kvantum, иконки) — подтверждение и бейдж «нужен рестарт».
 4. **Главная ценность — не редактирование, а видимость и валидация**: сейчас в системе уже два неверных значения (см. §14), и приложение их не видит. «Theme Doctor» на этом и строится.
-5. **MVP = read-only инспектор** (~60 полей, поиск, diff live↔profile, ссылки в системные настройки). Редактирование — вторая фаза.
+5. **MVP = read-only инспектор** (69 полей, поиск, diff live↔profile, ссылки в системные настройки). Редактирование — вторая фаза.
 
 ---
 
@@ -430,7 +430,7 @@ class ThemeCore(ABC):
 - [ ] Починить парсинг `status`: zed (`"mode": "dark",`), vscode (`workbench.colorTheme`), obsidian (`{}`).
 
 ### Phase 1 — read-only инспектор (1.5–2 дня)
-- [ ] `ThemeField`-реестр: ~60 полей, 6 секций, `summary`-флаги.
+- [ ] `ThemeField`-реестр: 69 полей, 5 секций + Advanced, `summary`-флаги.
 - [ ] Readers (INI/JSON/TOML/CSS/user.js), defaults, choices-провайдеры.
 - [ ] `validate()`: несуществующие scheme/L&F/Plasma theme/иконки/курсоры/шрифт; конфликт blur.
 - [ ] `ThemeCore` (Python), `ThemeController`, QML: `ThemePage`, `ThemeSectionPage`, `ThemeFieldRow`, `ColorSwatch`, `ValueBadge`.
