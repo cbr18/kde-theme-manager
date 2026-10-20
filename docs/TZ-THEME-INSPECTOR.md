@@ -368,8 +368,8 @@ scripts/install-kde-theme-manager.sh
 - [x] Undo/Revert работают; тесты используют temp HOME и не трогают реальные конфиги.
 - [x] `pytest` (146 в GUI-наборе), `test-scripts.sh`, `shellcheck` — зелёные.
 - [ ] 0 QML-предупреждений offscreen: остаётся одно предупреждение Kirigami StackView при программном push в dev-хуке (`KTM_OPEN_THEME`); при обычном клике не воспроизводится.
-- [ ] README + `docs/CURRENT_APP.md` + `docs/ROADMAP.md` обновлены.
-- [ ] Коммит и пуш в `origin/main`.
+- [x] README + `docs/CURRENT_APP.md` + `docs/ROADMAP.md` обновлены.
+- [x] Коммит и пуш в `origin/main` (`39d879c`, `aa219fe`).
 
 ---
 
