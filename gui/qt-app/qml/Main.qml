@@ -286,9 +286,13 @@ Kirigami.ApplicationWindow {
                             glassMode: root.glassMode
                             profileName: entry ? entry.name : ""
                             profileIsActive: entry ? entry.isActive : false
+                            profileSelected: entry ? root.selectedProfile === entry.name : false
                             profileComponentCount: entry ? entry.componentCount : 0
-                            profileComponents: entry ? entry.components : []
+                            profileCreatedAt: entry ? entry.createdAt : ""
 
+                            onSelectedClicked: function(profileName) {
+                                root.selectedProfile = profileName
+                            }
                             onApplyClicked: function(profileName) {
                                 profileController.applyProfile(profileName)
                             }
@@ -422,11 +426,19 @@ Kirigami.ApplicationWindow {
         preferredWidth: 380
         property string targetProfile: ""
 
+        background: Rectangle {
+            color: ThemeColors.dialogBg(root.glassMode)
+            radius: 8
+            border.width: 1
+            border.color: ThemeColors.cardBorder(root.glassMode)
+        }
+
         ColumnLayout {
             Layout.fillWidth: true
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
+                color: ThemeColors.fgColor(root.glassMode)
                 text: qsTr("Delete profile \"%1\"? This cannot be undone.").arg(confirmDialog.targetProfile)
             }
         }
@@ -444,9 +456,19 @@ Kirigami.ApplicationWindow {
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
         preferredWidth: 420
 
+        background: Rectangle {
+            color: ThemeColors.dialogBg(root.glassMode)
+            radius: 8
+            border.width: 1
+            border.color: ThemeColors.cardBorder(root.glassMode)
+        }
+
         ColumnLayout {
             Layout.fillWidth: true
-            Label { text: qsTr("Save the current theme as a new profile:") }
+            Label {
+                text: qsTr("Save the current theme as a new profile:")
+                color: ThemeColors.fgColor(root.glassMode)
+            }
             TextField {
                 id: nameField
                 Layout.fillWidth: true
@@ -471,6 +493,13 @@ Kirigami.ApplicationWindow {
         property string profileA: ""
         property string profileB: ""
 
+        background: Rectangle {
+            color: ThemeColors.dialogBg(root.glassMode)
+            radius: 8
+            border.width: 1
+            border.color: ThemeColors.cardBorder(root.glassMode)
+        }
+
         function updateDiff() {
             if (profileA !== "" && profileB !== "" && profileA !== profileB) {
                 diffText.text = profileController.diffProfiles(profileA, profileB)
@@ -492,6 +521,7 @@ Kirigami.ApplicationWindow {
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
+                color: ThemeColors.fgColor(root.glassMode)
                 text: qsTr("Difference between \"%1\" and \"%2\":").arg(diffDialog.profileA).arg(diffDialog.profileB)
                 font.bold: true
             }
@@ -508,11 +538,28 @@ Kirigami.ApplicationWindow {
                 implicitWidth: 0
                 clip: true
 
+                background: Rectangle {
+                    color: ThemeColors.codeBg(root.glassMode)
+                    radius: 6
+                    border.width: 1
+                    border.color: ThemeColors.subtleBorder(root.glassMode)
+                }
+
                 TextEdit {
                     id: diffText
                     readOnly: true
                     font.family: "monospace"
                     wrapMode: TextEdit.NoWrap
+                    color: ThemeColors.fgColor(root.glassMode)
+                    selectionColor: ThemeColors.accent()
+                    selectedTextColor: ThemeColors.fgColor(root.glassMode)
+                    leftPadding: 10
+                    topPadding: 8
+                    rightPadding: 10
+                    bottomPadding: 8
+                    palette.base: "transparent"
+                    palette.text: color
+                    palette.highlightedText: selectedTextColor
                 }
             }
         }
@@ -528,6 +575,13 @@ Kirigami.ApplicationWindow {
         property string activeProfile: ""
         property var componentsToApply: []
         property string diffContent: ""
+
+        background: Rectangle {
+            color: ThemeColors.dialogBg(root.glassMode)
+            radius: 8
+            border.width: 1
+            border.color: ThemeColors.cardBorder(root.glassMode)
+        }
 
         // Computed lazily when the dialog is actually opened: the active
         // profile is read *now* instead of relying on a property-changed
@@ -568,6 +622,7 @@ Kirigami.ApplicationWindow {
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
+                color: ThemeColors.fgColor(root.glassMode)
                 text: qsTr("Applying \"%1\" will change the following components:").arg(previewDialog.previewProfile)
             }
 
@@ -587,6 +642,7 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
                 text: qsTr("Diff against active profile:")
                 font.bold: true
+                color: ThemeColors.fgColor(root.glassMode)
             }
 
             ScrollView {
@@ -596,11 +652,28 @@ Kirigami.ApplicationWindow {
                 implicitWidth: 0   // see diffDialog: keep the dialog at preferredWidth
                 clip: true
 
+                background: Rectangle {
+                    color: ThemeColors.codeBg(root.glassMode)
+                    radius: 6
+                    border.width: 1
+                    border.color: ThemeColors.subtleBorder(root.glassMode)
+                }
+
                 TextEdit {
                     readOnly: true
                     font.family: "monospace"
                     wrapMode: TextEdit.NoWrap
                     text: previewDialog.diffContent
+                    color: ThemeColors.fgColor(root.glassMode)
+                    selectionColor: ThemeColors.accent()
+                    selectedTextColor: ThemeColors.fgColor(root.glassMode)
+                    leftPadding: 10
+                    topPadding: 8
+                    rightPadding: 10
+                    bottomPadding: 8
+                    palette.base: "transparent"
+                    palette.text: color
+                    palette.highlightedText: selectedTextColor
                 }
             }
         }

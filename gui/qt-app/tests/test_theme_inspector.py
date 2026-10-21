@@ -345,6 +345,30 @@ def test_controller_profile_scope_is_read_only(home: Path) -> None:
     assert "read-only" in messages[-1][0].lower()
 
 
+def test_controller_profile_summary(home: Path) -> None:
+    """The profile card shows a theme fingerprint instead of identical chips."""
+    from core.protocol import CoreFactory
+    from controllers.theme_inspector import ThemeInspectorController
+
+    CoreFactory.reset()
+    controller = ThemeInspectorController()
+    summary = controller.profileSummary("glass")
+
+    assert summary["accent"] == "#0a141e"
+    assert summary["scheme"] == "Breeze1"
+    assert summary["lookAndFeel"] == "glass"
+    assert summary["swatches"][0] == "#20241f"
+    assert "#0a141e" in summary["swatches"]
+    assert summary["fileCount"] >= 1
+    assert summary["sizeBytes"] > 0
+
+    assert controller.profileSummary("") == {}
+    # Unknown profiles must not raise; the card falls back to its basic state.
+    unknown = controller.profileSummary("no-such-profile")
+    assert unknown["sizeBytes"] == 0
+    assert unknown["accent"] == ""
+
+
 def test_qml_wiring() -> None:
     qml = PROJECT_ROOT / "qml"
     page = (qml / "pages" / "ThemePage.qml").read_text()
@@ -367,6 +391,13 @@ def test_profile_card_has_inspect_action() -> None:
     text = (PROJECT_ROOT / "qml" / "Components" / "ProfileCardDelegate.qml").read_text()
     assert "signal inspectClicked(string profileName)" in text
     assert "card.inspectClicked" in text
+    # Actions are labelled: icon-only buttons were invisible without an icon
+    # theme, and the palette icon was not recognizable as "Inspect".
+    assert 'text: qsTr("Inspect")' in text
+    assert 'qsTr("Apply")' in text
+    assert "themeInspector.profileSummary" in text
+    # Component chips were identical for every profile and are gone.
+    assert "Kirigami.Chip" not in text
 
 
 def test_ini_helpers_preserve_other_keys() -> None:

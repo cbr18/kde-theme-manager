@@ -196,6 +196,80 @@ class ThemeInspectorController(QObject):
     def fontFamilies(self) -> list:
         return self._core.font_families()
 
+    @Slot(str, result="QVariantMap")
+    def profileSummary(self, name: str) -> dict:
+        """Fingerprint of a saved profile for its card in "Available Profiles".
+
+        The profile cards used to repeat the same component chips for every
+        profile. The component set is almost always identical, so instead show
+        what actually distinguishes a theme: its palette, colour scheme,
+        Kvantum/Plasma assets, corner radius, blur and terminal opacity.
+        """
+        if not name:
+            return {}
+
+        scope = f"profile:{name}"
+
+        def field(field_id: str) -> dict:
+            try:
+                return self._core.get(field_id, scope) or {}
+            except Exception:  # noqa: BLE001 - a card must never break the UI
+                return {}
+
+        def display(field_id: str) -> str:
+            return str(field(field_id).get("display") or "")
+
+        accent = display("accent_color")
+        swatches = [
+            color
+            for color in (
+                display("window_bg"),
+                display("view_bg"),
+                accent,
+                display("text_color"),
+            )
+            if color
+        ]
+
+        # A broken or unreadable profile should still render a card; the stats
+        # are a nicety, not a requirement.
+        profiles_dir = getattr(self._core, "profiles_dir", None)
+        root = (
+            profiles_dir / name
+            if profiles_dir is not None
+            else Path.home() / ".config" / "theme-profile" / "profiles" / name
+        )
+        size_bytes = 0
+        file_count = 0
+        try:
+            for entry in root.rglob("*"):
+                try:
+                    if entry.is_file():
+                        file_count += 1
+                        size_bytes += entry.stat().st_size
+                except OSError:
+                    continue
+        except OSError:
+            pass
+
+        return {
+            "accent": accent,
+            "swatches": swatches,
+            "scheme": display("color_scheme"),
+            "lookAndFeel": display("look_and_feel"),
+            "plasmaTheme": display("plasma_theme"),
+            "kvantum": display("kvantum_theme"),
+            "radius": display("klassy_radius"),
+            "blur": display("blur_strength"),
+            "blurEnabled": bool(field("blur_enabled").get("value")),
+            "kitty": display("kitty_opacity"),
+            "iconTheme": display("icon_theme"),
+            "gtkTheme": display("gtk_theme"),
+            "decoration": display("decoration_theme"),
+            "sizeBytes": size_bytes,
+            "fileCount": file_count,
+        }
+
     @Slot(str, result=str)
     def sectionTitle(self, section: str) -> str:
         for item in SECTIONS:

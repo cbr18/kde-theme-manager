@@ -12,41 +12,92 @@ Kirigami.AbstractCard {
     // Explicit data (avoids relying on QML model-role semantics)
     property string profileName: ""
     property bool profileIsActive: false
+    property bool profileSelected: false
     property int profileComponentCount: 0
-    property var profileComponents: []
+    property string profileCreatedAt: ""
     // Glass mode is passed down because QML components cannot see the
     // root window's properties across component-file scopes.
     property bool glassMode: false
 
-    property var compList: profileComponents ? profileComponents : []
-    property var firstComponents: compList.slice(0, 8)
-    property bool hasMore: compList.length > 8
+    // Fingerprint of the saved profile (palette, scheme, assets, effects).
+    // Component chips were removed: every profile tracks the same component
+    // set, so they said nothing about the theme.
+    property var summary: ({})
+    property string _summaryLoadedFor: ""
 
-    function getComponentIcon(compId) {
-        const icons = {
-            "kwin": "preferences-system-windows",
-            "plasma_shell": "plasma",
-            "kdeglobals": "preferences-desktop-theme",
-            "gtk3": "gtk-preferences",
-            "gtk4": "gtk-preferences",
-            "qt5ct": "qtlogo",
-            "klassy": "preferences-system-windows",
-            "kvantum": "preferences-system-windows",
-            "kitty": "utilities-terminal",
-            "alacritty": "utilities-terminal",
-            "wofi": "system-run",
-            "btop": "utilities-system-monitor",
-            "fastfetch": "preferences-desktop-theme",
-            "zed": "text-editor",
-            "vscode": "visual-studio-code",
-            "cursor": "text-editor",
-            "zen": "web-browser",
-            "obsidian": "x-office-document",
-            "color_schemes": "preferences-desktop-color",
-            "look_and_feel": "preferences-desktop-theme"
-        }
-        return icons[compId] || "application-x-executable"
+    readonly property string displayName: profileName === "glass" ? qsTr("Glass")
+        : profileName === "paper" ? qsTr("Paper")
+        : profileName
+
+    readonly property var swatches: summary.swatches ? summary.swatches : []
+
+    readonly property string paletteLine: {
+        var parts = []
+        if (summary.accent) parts.push(summary.accent)
+        if (summary.scheme) parts.push(summary.scheme)
+        if (summary.kvantum) parts.push(summary.kvantum)
+        return parts.join("  ·  ")
     }
+
+    readonly property string detailLine: {
+        var parts = []
+        if (summary.lookAndFeel) parts.push(qsTr("L&F %1").arg(summary.lookAndFeel))
+        if (summary.radius) parts.push(qsTr("Corners %1").arg(summary.radius))
+        if (summary.blurEnabled && summary.blur) parts.push(qsTr("Blur %1").arg(summary.blur))
+        if (summary.kitty) {
+            var opacity = parseFloat(summary.kitty)
+            if (!isNaN(opacity)) parts.push(qsTr("Kitty %1%").arg(Math.round(opacity * 100)))
+        }
+        return parts.join("  ·  ")
+    }
+
+    readonly property string metaLine: {
+        var parts = []
+        if (profileCreatedAt) parts.push(qsTr("Saved %1").arg(formatSaved(profileCreatedAt)))
+        if (summary.sizeBytes) parts.push(formatSize(summary.sizeBytes))
+        if (profileComponentCount) parts.push(qsTr("%n components", "", profileComponentCount))
+        return parts.join("  ·  ")
+    }
+
+    function formatSaved(iso) {
+        if (!iso) return ""
+        var date = new Date(iso)
+        if (isNaN(date.getTime())) return iso.substring(0, 10)
+        return Qt.formatDate(date, "dd MMM yyyy")
+    }
+
+    function formatSize(bytes) {
+        if (!bytes || bytes <= 0) return ""
+        if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB"
+        return Math.max(1, Math.round(bytes / 1024)) + " KB"
+    }
+
+    function reloadSummary(force) {
+        if (!profileName) {
+            summary = ({})
+            _summaryLoadedFor = ""
+            return
+        }
+        if (!force && _summaryLoadedFor === profileName) return
+        _summaryLoadedFor = profileName
+        summary = themeInspector.profileSummary(profileName)
+    }
+
+    Component.onCompleted: reloadSummary(false)
+    onProfileNameChanged: reloadSummary(true)
+
+    Connections {
+        target: profileController
+        function onProfilesChanged() { card.reloadSummary(true) }
+    }
+
+    // Selecting is a separate, cheap action. Applying stays an explicit
+    // button because switching profiles touches a lot of files.
+    TapHandler {
+        onTapped: card.selectedClicked(card.profileName)
+    }
+
+    HoverHandler { id: hover }
 
     contentItem: ColumnLayout {
         spacing: Platform.Units.smallSpacing
@@ -56,144 +107,174 @@ Kirigami.AbstractCard {
             Layout.fillWidth: true
             spacing: Platform.Units.mediumSpacing
 
-            Kirigami.Icon {
-                source: "preferences-desktop-theme"
-                Layout.preferredWidth: Platform.Units.iconSizes.large
-                Layout.preferredHeight: Platform.Units.iconSizes.large
-                color: ThemeColors.accent()
-            }
-
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 2
 
-                Label {
-                    text: card.profileName === "glass" ? qsTr("Glass")
-                        : card.profileName === "paper" ? qsTr("Paper")
-                        : card.profileName
-                    font.bold: true
-                    font.pointSize: TypeScale.subtitle
-                    color: ThemeColors.fgColor(card.glassMode)
+                RowLayout {
+                    spacing: Platform.Units.smallSpacing
+
+                    Label {
+                        text: card.displayName
+                        font.bold: true
+                        font.pointSize: TypeScale.subtitle
+                        color: ThemeColors.fgColor(card.glassMode)
+                    }
+
+                    RowLayout {
+                        visible: card.profileIsActive
+                        spacing: 4
+
+                        Rectangle {
+                            Layout.alignment: Qt.AlignVCenter
+                            width: 8
+                            height: 8
+                            radius: 4
+                            color: ThemeColors.positive()
+                        }
+
+                        Label {
+                            text: qsTr("Active")
+                            font.pointSize: TypeScale.caption
+                            font.bold: true
+                            color: ThemeColors.positive()
+                        }
+                    }
                 }
 
                 Label {
-                    text: qsTr("%1 components").arg(card.profileComponentCount)
+                    Layout.fillWidth: true
+                    text: card.metaLine
                     font.pointSize: TypeScale.caption
                     color: ThemeColors.dimColor(card.glassMode)
+                    elide: Text.ElideRight
                 }
-            }
-
-            Item { Layout.fillWidth: true }
-
-            // Active badge
-            Kirigami.Icon {
-                source: "dialog-ok-apply"
-                visible: card.profileIsActive
-                color: ThemeColors.positive()
-                Layout.preferredWidth: Platform.Units.iconSizes.medium
-                Layout.preferredHeight: Platform.Units.iconSizes.medium
             }
         }
 
-        // ─── Component tags ───
-        Flow {
+        // ─── Palette + theme fingerprint ───
+        RowLayout {
             Layout.fillWidth: true
-            spacing: 4
-            visible: card.firstComponents.length > 0
+            Layout.topMargin: Platform.Units.smallSpacing
+            spacing: Platform.Units.mediumSpacing
+            visible: card.swatches.length > 0
 
-            Repeater {
-                model: card.firstComponents
-                delegate: Kirigami.Chip {
-                    text: modelData
-                    icon.name: card.getComponentIcon(modelData)
-                    closable: false
+            Row {
+                Layout.alignment: Qt.AlignTop
+                spacing: 4
+
+                Repeater {
+                    model: card.swatches
+
+                    delegate: Rectangle {
+                        width: 24
+                        height: 24
+                        radius: 4
+                        color: modelData
+                        border.width: 1
+                        border.color: ThemeColors.cardBorder(card.glassMode)
+
+                        MouseArea {
+                            id: swatchArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.NoButton
+                        }
+
+                        ToolTip.text: modelData
+                        ToolTip.visible: swatchArea.containsMouse
+                    }
                 }
             }
 
-            Loader {
-                active: card.hasMore
-                sourceComponent: moreChip
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 1
+
+                Label {
+                    Layout.fillWidth: true
+                    text: card.paletteLine
+                    font.family: "monospace"
+                    font.pointSize: TypeScale.caption
+                    color: ThemeColors.fgColorSoft(card.glassMode)
+                    elide: Text.ElideRight
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: card.detailLine
+                    font.pointSize: TypeScale.caption
+                    color: ThemeColors.dimColor(card.glassMode)
+                    elide: Text.ElideRight
+                }
             }
         }
 
         // ─── Actions ───
         RowLayout {
             Layout.fillWidth: true
-            Item { Layout.fillWidth: true }
+            Layout.topMargin: Platform.Units.smallSpacing
+            spacing: Platform.Units.smallSpacing
 
             Button {
+                text: card.profileIsActive ? qsTr("Re-apply") : qsTr("Apply")
                 icon.name: card.profileIsActive ? "view-refresh" : "dialog-ok-apply"
-                flat: true
-                ToolTip.text: card.profileIsActive ? qsTr("Re-apply profile") : qsTr("Apply profile")
-                ToolTip.visible: hovered
-                Accessible.name: ToolTip.text
-                Accessible.role: Accessible.Button
+                highlighted: !card.profileIsActive
+                enabled: !profileController.busy
                 onClicked: card.applyClicked(card.profileName)
             }
 
             Button {
+                text: qsTr("Preview")
                 icon.name: "document-preview"
-                flat: true
                 visible: !card.profileIsActive
-                ToolTip.text: qsTr("Preview changes before applying")
-                ToolTip.visible: hovered
-                Accessible.name: ToolTip.text
-                Accessible.role: Accessible.Button
+                enabled: !profileController.busy
                 onClicked: card.previewClicked(card.profileName)
             }
 
             Button {
+                text: qsTr("Diff")
                 icon.name: "document-properties"
-                flat: true
                 visible: !card.profileIsActive
-                ToolTip.text: qsTr("Compare with active profile")
-                ToolTip.visible: hovered
-                Accessible.name: ToolTip.text
-                Accessible.role: Accessible.Button
+                enabled: !profileController.busy
                 onClicked: card.diffClicked(card.profileName)
             }
 
             Button {
+                text: qsTr("Inspect")
                 icon.name: "preferences-desktop-theme"
-                flat: true
-                ToolTip.text: qsTr("Inspect the theme values stored in this profile")
-                ToolTip.visible: hovered
-                Accessible.name: ToolTip.text
-                Accessible.role: Accessible.Button
+                enabled: !profileController.busy
                 onClicked: card.inspectClicked(card.profileName)
             }
 
+            Item { Layout.fillWidth: true }
+
             Button {
+                text: qsTr("Delete")
                 icon.name: "edit-delete"
                 flat: true
                 visible: !card.profileIsActive
-                ToolTip.text: qsTr("Delete profile")
-                ToolTip.visible: hovered
-                Accessible.name: ToolTip.text
-                Accessible.role: Accessible.Button
+                enabled: !profileController.busy
+                palette.buttonText: ThemeColors.negative()
                 onClicked: card.deleteClicked(card.profileName)
             }
         }
     }
 
-    Component {
-        id: moreChip
-        Kirigami.Chip {
-            text: "+" + Math.max(0, card.compList.length - 8)
-            icon.name: "view-more"
-            ToolTip.text: qsTr("%1 more components").arg(Math.max(0, card.compList.length - 8))
-            ToolTip.visible: hovered
-        }
-    }
-
     background: Rectangle {
         radius: 8
-        border.width: 1
-        color: ThemeColors.cardBg(card.glassMode)
-        border.color: ThemeColors.cardBorder(card.glassMode)
+        border.width: card.profileSelected ? 2 : 1
+        color: card.profileSelected
+            ? ThemeColors.cardHoverBg(card.glassMode)
+            : (hover.hovered ? ThemeColors.cardHoverBg(card.glassMode)
+                             : ThemeColors.cardBg(card.glassMode))
+        border.color: card.profileSelected
+            ? (card.summary.accent ? card.summary.accent : ThemeColors.accent())
+            : ThemeColors.cardBorder(card.glassMode)
     }
 
     // Signals
+    signal selectedClicked(string profileName)
     signal applyClicked(string profileName)
     signal previewClicked(string profileName)
     signal diffClicked(string profileName)
