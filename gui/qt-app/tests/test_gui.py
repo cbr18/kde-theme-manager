@@ -1443,7 +1443,9 @@ def test_rust_core_mapping_helpers() -> None:
     assert known.status is AppStatus.AVAILABLE
 
     assert rust_core._json_argument(None) is None
-    assert rust_core._json_argument([]) is None
+    # An explicit empty list must stay an array so the Rust core can reject it;
+    # collapsing it to None silently applied every component.
+    assert rust_core._json_argument([]) == "[]"
     assert json.loads(rust_core._json_argument(["kwin", "gtk3"])) == ["kwin", "gtk3"]
 
 
@@ -1539,6 +1541,21 @@ class TestCoreParity:
         if len(names) == 2:
             assert rust.diff(*names) == py.diff(*names)
 
+    def test_profile_rejects_empty_and_unknown_components(self, core_factory) -> None:
+        """``[]`` means "nothing selected", never "all components"."""
+        (py, rust), *_ = self.cores()
+        profiles = [p.name for p in py.list_profiles()]
+        if not profiles:
+            pytest.skip("no profiles in the fixture")
+        profile = profiles[0]
+
+        assert not py.apply(profile, []).success
+        assert not rust.apply(profile, []).success
+        assert not py.save(f"{profile}-copy", []).success
+        assert not rust.save(f"{profile}-copy", []).success
+        assert not py.apply(profile, ["not-a-component"]).success
+        assert not rust.apply(profile, ["not-a-component"]).success
+
     def test_wallpapers(self, core_factory) -> None:
         _, (py, rust), *_ = self.cores()
 
@@ -1596,6 +1613,9 @@ class TestCoreParity:
         from core.rust_core import RustSettingsCore
 
         monkeypatch.setenv("HOME", str(tmp_path))
+        # The core is XDG-aware: pin XDG_CONFIG_HOME too, otherwise the test
+        # writes into the real ~/.config when the host session exports it.
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
 
         saved = AppSettings(
             **{**AppSettings().to_dict(), "core_backend": "rust", "theme": "paper"}

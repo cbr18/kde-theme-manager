@@ -76,7 +76,7 @@ A change is not done until the docs agree with the code. At minimum:
 ## Verification (run before committing)
 
 ```bash
-# Python tests (offscreen Qt; ~156 tests)
+# Python tests (offscreen Qt; ~157 tests)
 cd gui/qt-app && QT_QPA_PLATFORM=offscreen uv run --project . --extra dev pytest tests -q
 
 # Bash tests (~96 assertions) — from the repo root

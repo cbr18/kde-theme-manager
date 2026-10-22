@@ -263,8 +263,13 @@ def _call_status(name: str, *args: str) -> Result:
 
 
 def _json_argument(components: Optional[list[str]]) -> Optional[str]:
-    """`--components` list → JSON string (None when unset)."""
-    if not components:
+    """`--components` list → JSON string (None only when unset).
+
+    ``None`` means "the caller did not choose components" and the Rust core
+    applies everything.  An explicit ``[]`` must stay a JSON array so the core
+    can reject it instead of silently widening the apply to all components.
+    """
+    if components is None:
         return None
     return json.dumps(list(components))
 
