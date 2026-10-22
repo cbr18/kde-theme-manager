@@ -44,3 +44,19 @@ jobs:
         run: python -m py_compile src/*.py src/core/*.py src/core/python_core.py tests/test_gui.py
       - name: Run tests
         run: python -m pytest tests/ -v
+
+  test-rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gui/qt-app/src/core/rust_core
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Unit tests
+        run: cargo test
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
