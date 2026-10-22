@@ -256,6 +256,11 @@ plasma-applet/
 > Глобальный хоткей (Meta+T) снят с плана: без desktop-entry с
 > `X-KDE-GlobalAccel-CommandShortcut=true` KGlobalAccel не создаёт компонент, а
 > для toggle-семантики нужен ещё и single-instance слой.
+>
+> Профиль `default` (baseline текущей темы) отложен. Если делать — только
+> вручную, кнопкой «Сохранить как default», без автосоздания при запуске. Имя
+> `system` не используем, чтобы не путать с `AppSettings.theme = "system"`
+> (внешний вид приложения, а не профиль).
 
 ---
 
