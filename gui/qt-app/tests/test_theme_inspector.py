@@ -321,6 +321,55 @@ def test_search_uses_labels_keys_and_russian_keywords(home: Path) -> None:
     assert core.search("") == []
 
 
+def test_revert_removes_a_file_created_in_the_session(home: Path) -> None:
+    core = PythonThemeCore()
+    kitty = home / ".config/kitty/kitty.conf"
+    kitty.unlink()
+    assert core.set_value("kitty_opacity", 0.9).success
+    assert kitty.is_file()
+    assert core.revert().success
+    assert not kitty.exists(), "revert must remove files created during the session"
+
+
+def test_atomic_write_preserves_private_permissions(home: Path) -> None:
+    core = PythonThemeCore()
+    kdeglobals = home / ".config/kdeglobals"
+    kdeglobals.chmod(0o600)
+    assert core.set_value("accent_color", "#010203").success
+    assert kdeglobals.stat().st_mode & 0o777 == 0o600
+
+
+def test_controller_rejects_invalid_profile_scope(home: Path) -> None:
+    from core.protocol import CoreFactory
+    from controllers.theme_inspector import ThemeInspectorController
+
+    CoreFactory.reset()
+    controller = ThemeInspectorController()
+    messages: list[tuple[str, bool]] = []
+    controller.toast.connect(lambda text, ok: messages.append((text, ok)))
+    controller.setScope("profile:../etc")
+    assert controller.scope == "live"
+    assert messages and messages[-1][1] is False
+    assert controller.profileSummary("../etc") == {}
+
+
+def test_controller_read_only_undo_does_not_touch_live_files(home: Path) -> None:
+    from core.protocol import CoreFactory
+    from controllers.theme_inspector import ThemeInspectorController
+
+    CoreFactory.reset()
+    controller = ThemeInspectorController()
+    controller.setScope("profile:glass")
+    messages: list[tuple[str, bool]] = []
+    controller.toast.connect(lambda text, ok: messages.append((text, ok)))
+    before = (home / ".config/kdeglobals").read_text()
+    controller.undo()
+    controller.revertAll()
+    assert len(messages) == 2
+    assert all(not ok for _, ok in messages)
+    assert (home / ".config/kdeglobals").read_text() == before
+
+
 def test_controller_profile_scope_is_read_only(home: Path) -> None:
     from core.protocol import CoreFactory
     from controllers.theme_inspector import ThemeInspectorController

@@ -151,13 +151,18 @@ somewhere else.
 Where the data lives (never touched by install/update):
 
 ```
-~/.config/theme-profile/
+$XDG_CONFIG_HOME/theme-profile/   (default ~/.config/theme-profile/)
 ├── profiles/<name>/     the profiles themselves (theme snapshots)
 ├── backups/             pre-apply + deploy backups
 ├── manifests/           what a profile covers
 ├── active-profile       currently applied profile
 └── app-preferences.json GUI settings (created when you first save settings)
 ```
+
+The data root is XDG-aware: an existing `$XDG_CONFIG_HOME/theme-profile` wins,
+then an existing legacy `~/.config/theme-profile`, then the XDG path. Profile
+snapshots themselves always keep the historical `.config/...` layout, so
+profiles created before XDG support keep working unchanged.
 
 The theme itself is not stored by the app — applying a profile writes the usual
 KDE configuration (`~/.config/kdeglobals`, `kwinrc`, `gtk-3.0/settings.ini`, …).
@@ -189,10 +194,10 @@ mypy src/
 # QML syntax/type lint (PySide6 6.12 ships its own qmllint)
 .venv/bin/pyside6-qmllint -I qml -I /usr/lib/qt6/qml qml/Main.qml qml/pages/SettingsPage.qml qml/Components/*.qml
 
-# Tests (Python: 121, from gui/qt-app)
+# Tests (Python: 156, from gui/qt-app)
 .venv/bin/python -m pytest tests/ -q
 
-# Tests (bash tooling: 86, from the repo root)
+# Tests (bash tooling: 96, from the repo root)
 bash tests/test-scripts.sh
 
 # Static shell analysis (repo root)
@@ -361,7 +366,8 @@ work without configuration.
 
 ## Configuration
 
-Settings stored in `~/.config/theme-profile/app-preferences.json`:
+Settings stored in `~/.config/theme-profile/app-preferences.json` (or
+`$XDG_CONFIG_HOME/theme-profile/`, see below):
 
 ```json
 {
@@ -376,9 +382,20 @@ Settings stored in `~/.config/theme-profile/app-preferences.json`:
   "global_hotkey": "",
   "confirm_before_apply": true,
   "create_backup_before_apply": true,
-  "notify_on_success": true
+  "notify_on_success": true,
+  "core_backend": "python"
 }
 ```
+
+Keys no longer backed by a Settings control are kept for forward/backward
+compatibility and are ignored by the GUI:
+
+- `global_hotkey` — the configurable hotkey was removed; a bare KGlobalAccel
+  registration never produced a working shortcut (see below).
+- `wallpaper_linked_to_profile`, `show_not_installed_warning`,
+  `create_backup_before_apply` — the corresponding dead toggles were dropped
+  from the Settings page; backups are always taken before an apply.
+
 
 ## Building
 
@@ -417,9 +434,13 @@ cargo build --release
 - [x] System tray: quick profile switching (active profile ticked, wallpaper
       next/prev/pick, notifications, Quit)
 - [x] Rust core (`libkde_theme_core.so`) behind `--core` / `$KTM_CORE` / Settings
-- [ ] Global hotkey (Meta+T)
 - [ ] Auto-sync with system theme changes
 - [ ] Plasma applet version
+
+> A configurable global hotkey (Meta+T) was dropped: KGlobalAccel only creates a
+> component object for apps whose desktop entry carries
+> `X-KDE-GlobalAccel-CommandShortcut=true`, so a bare D-Bus `doRegister` never
+> yielded a usable shortcut.
 
 ## License
 

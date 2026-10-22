@@ -41,10 +41,12 @@
 - [ ] System: следование за системной темой (KDE color scheme)
 - [ ] Сохранение выбранной темы в настройках
 
-#### 4. System Tray + Global Hotkey
-- [ ] System tray icon (Kirigami.ApplicationWindow + QSystemTrayIcon)
-- [ ] Global hotkey: Meta+T → toggle window (KGlobalAccel или Wayland protocol)
-- [ ] Minimize to tray вместо закрытия
+#### 4. System Tray
+- [x] System tray icon (Kirigami.ApplicationWindow + QSystemTrayIcon)
+- [x] Minimize to tray вместо закрытия
+- [x] ~~Global hotkey: Meta+T → toggle window~~ — **убрано**: KGlobalAccel создаёт
+  компонент только для `.desktop` с `X-KDE-GlobalAccel-CommandShortcut=true`, а
+  голый `doRegister` не давал рабочего шортката. См. `gui/qt-app/README.md`.
 
 #### 5. Авто-детект Zen Browser профиля
 ```python
@@ -222,7 +224,7 @@ plasma-applet/
 | Версия | Runtime | Build | Packaging |
 |--------|---------|-------|-----------|
 | v0.2.x | Python 3.11+, PySide6, uv | pip/uv | GitHub Releases |
-| v0.3.0 | + KNotification, KGlobalAccel | | |
+| v0.3.0 | + KNotification | | |
 | v0.4.0 | Rust 1.75+, Python 3.11+ (transition) | cargo + pip | Single binary |
 | v1.0.0 | C++17, Qt6, KDE Frameworks 6 | CMake, ECM | AUR, Flatpak, KDE Store |
 
@@ -235,7 +237,7 @@ plasma-applet/
 | `--components` в bash | Bash, KDE config | 1ч |
 | QML полировка | QML, Kirigami | 4-8ч |
 | Dogfooding (glass blur) | Qt Wayland, KWin | 2-4ч |
-| System Tray + Hotkey | QSystemTrayIcon, KGlobalAccel | 4-6ч |
+| System Tray | QSystemTrayIcon | 4-6ч |
 | Rust Core FFI | Rust, C FFI, cffi/pyo3 | 20-40ч |
 | Config parsers (Rust) | Rust, serde, toml, ini | 10-20ч |
 | Plasma Applet | C++, Qt6, KDE Frameworks | 30-60ч |
@@ -250,7 +252,10 @@ plasma-applet/
 | QML багфиксы | Import/Export | Auto-sync | Plasma Applet |
 | Dogfooding (basic) | Notifications | Multi-monitor | Cloud Sync |
 | System Tray | Zen profile autodetect | | |
-| Global Hotkey | | | |
+
+> Глобальный хоткей (Meta+T) снят с плана: без desktop-entry с
+> `X-KDE-GlobalAccel-CommandShortcut=true` KGlobalAccel не создаёт компонент, а
+> для toggle-семантики нужен ещё и single-instance слой.
 
 ---
 

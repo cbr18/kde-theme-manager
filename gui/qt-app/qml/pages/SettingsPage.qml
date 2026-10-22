@@ -141,18 +141,6 @@ Kirigami.ScrollablePage {
                 Kirigami.FormLayout {
                     Layout.fillWidth: true
 
-                    Switch {
-                        id: wallpaperLinkedSwitch
-                        text: qsTr("Link wallpaper to profile")
-                        onToggled: settingsController.wallpaperLinkedToProfile = checked
-                        Binding {
-                            target: wallpaperLinkedSwitch
-                            property: "checked"
-                            value: settingsController.wallpaperLinkedToProfile
-                            restoreMode: Binding.RestoreBindingOrValue
-                        }
-                    }
-
                     RowLayout {
                         Kirigami.FormData.label: qsTr("Wallpaper directory")
 
@@ -268,18 +256,6 @@ Kirigami.ScrollablePage {
                     Layout.fillWidth: true
 
                     Switch {
-                        id: notInstalledSwitch
-                        Kirigami.FormData.label: qsTr("Show warning for not installed apps")
-                        onToggled: settingsController.showNotInstalledWarning = checked
-                        Binding {
-                            target: notInstalledSwitch
-                            property: "checked"
-                            value: settingsController.showNotInstalledWarning
-                            restoreMode: Binding.RestoreBindingOrValue
-                        }
-                    }
-
-                    Switch {
                         id: autoApplySwitch
                         Kirigami.FormData.label: qsTr("Auto-apply last profile on startup")
                         onToggled: settingsController.autoApplyOnStartup = checked
@@ -316,24 +292,17 @@ Kirigami.ScrollablePage {
                     }
 
                     Switch {
-                        id: backupSwitch
-                        Kirigami.FormData.label: qsTr("Create backup before applying")
-                        onToggled: settingsController.createBackupBeforeApply = checked
+                        id: notifySwitch
+                        Kirigami.FormData.label: qsTr("Show notification on success")
+                        onToggled: settingsController.notifyOnSuccess = checked
                         Binding {
-                            target: backupSwitch
+                            target: notifySwitch
                             property: "checked"
-                            value: settingsController.createBackupBeforeApply
+                            value: settingsController.notifyOnSuccess
                             restoreMode: Binding.RestoreBindingOrValue
                         }
                     }
 
-                    TextField {
-                        Kirigami.FormData.label: qsTr("Global hotkey")
-                        Layout.fillWidth: true
-                        text: settingsController.globalHotkey
-                        placeholderText: "Meta+T"
-                        onEditingFinished: settingsController.globalHotkey = text
-                    }
                 }
             }
         }

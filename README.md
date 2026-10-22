@@ -19,6 +19,7 @@
 - [Rollback & Recovery](#rollback--восстановление)
 - [Troubleshooting](#troubleshooting--устранение-неполадок)
 - [Editing Rule](#editing-rule--правило-редактирования)
+- [Hardening](#hardening--безопасность)
 - [License](#license--лицензия)
 
 ---
@@ -91,9 +92,14 @@ entry). Creates timestamped backups of every replaced file in
 | desktop entry | `~/.local/share/applications/kde-theme-manager.desktop` |
 | app icon | `~/.local/share/icons/hicolor/scalable/apps/ktm-theme-manager.svg` |
 
+Install locations follow `XDG_BIN_HOME` / `XDG_DATA_HOME` when set.
+
 **Data is separate from code** — profiles, backups and settings live in
-`~/.config/theme-profile/` (`profiles/`, `backups/`, `manifests/`,
-`active-profile`, `app-preferences.json`) and are never touched by an install.
+`$XDG_CONFIG_HOME/theme-profile/` (default `~/.config/theme-profile/`;
+`profiles/`, `backups/`, `manifests/`, `active-profile`,
+`app-preferences.json`) and are never touched by an install. An existing legacy
+`~/.config/theme-profile/` is detected and kept, and profile snapshots always
+use the historical `.config/...` layout, so pre-XDG profiles keep working.
 The applied theme itself is the usual KDE configuration (`kdeglobals`,
 `kwinrc`, `gtk-3.0/settings.ini`, …).
 
@@ -231,8 +237,11 @@ scripts/uninstall-kde-theme-manager.sh
 
 Removes the scripts from `~/.local/bin/`, the app from
 `~/.local/share/kde-theme-manager/`, its launcher, desktop entry and icon, and
-wipes `~/.config/theme-profile/`. Does **not** touch your KDE config files, wofi
-styles, or application settings — those must be reverted manually.
+wipes the data directory (`$XDG_CONFIG_HOME/theme-profile/`, falling back to
+`~/.config/theme-profile/`). The confirmation prompt is shown **before** any
+file is removed, so answering "no" leaves the installation untouched. Does
+**not** touch your KDE config files, wofi styles, or application settings —
+those must be reverted manually.
 See [Rollback & Recovery](#rollback--восстановление).
 
 ## Rollback / Восстановление
@@ -261,6 +270,20 @@ See [`docs/ROLLBACK.md`](docs/ROLLBACK.md) for full instructions. Quick summary:
 1. Edit files in `~/theme-profile-kit/files/bin/` first.
 2. Re-run `install-theme-profile-kit.sh` to deploy.
 3. Do **not** edit `~/.local/bin/` directly — copy changes back into the kit immediately.
+
+## Hardening / Безопасность
+
+- **Profile names** are validated (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`) in bash,
+  Python and Rust before touching the filesystem; `..`, separators and shell
+  metacharacters are rejected, and `diff` cannot traverse outside `profiles/`.
+- **Custom component lists** are validated against the known component set; an
+  explicitly empty selection is rejected instead of silently applying everything.
+- **Config writes are atomic and permission-preserving**: an existing file keeps
+  its mode, a new file is created `0600`, and `app-preferences.json` is private.
+- **A revert** of a Theme Inspector session also removes files that the session
+  created, while keeping the on-disk backup of what it changed.
+- **Installers** escape a checkout path before `sed` substitution and take
+  backups with unique names (no silent overwrite on same-second runs).
 
 ## License / Лицензия
 

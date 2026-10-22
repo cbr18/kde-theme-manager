@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use dirs;
 use which;
 
+use crate::paths::live_path;
 use crate::types::Component;
 
 /// Tracked Apps Core Trait
@@ -382,9 +382,8 @@ fn detect_app_status(app: &TrackedAppDef) -> crate::types::AppStatus {
         }
     }
 
-    // Check configs
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    let has_configs = app.config_paths.iter().any(|p| home.join(p).exists());
+    // Check configs through the XDG-aware resolver.
+    let has_configs = app.config_paths.iter().any(|p| live_path(p).exists());
 
     if has_configs {
         crate::types::AppStatus::Available

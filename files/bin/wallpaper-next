@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
+CACHE_HOME="${XDG_CACHE_HOME:-${HOME}/.cache}"
+
 DIR="${WALLPAPER_DIR:-$HOME/Изображения/Wallpaper}"
-STATE="${WALLPAPER_STATE:-$HOME/.cache/wallpaper_index}"
-PLASMA_CONFIG="${PLASMA_APPLETSRC:-$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc}"
+STATE="${WALLPAPER_STATE:-$CACHE_HOME/wallpaper_index}"
+PLASMA_CONFIG="${PLASMA_APPLETSRC:-$CONFIG_HOME/plasma-org.kde.plasma.desktop-appletsrc}"
 
 # ── The wallpaper list ───────────────────────────────────────────────────────
 # The index in $STATE is a *position* in this list, so every consumer (these

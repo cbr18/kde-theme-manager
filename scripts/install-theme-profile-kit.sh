@@ -5,9 +5,10 @@ say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 
 KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_DIR="$KIT_DIR/files/bin"
-DEST_DIR="$HOME/.local/bin"
-BACKUP_ROOT="$HOME/.config/theme-profile/backups"
-BACKUP_DIR="$BACKUP_ROOT/deploy-theme-profile-kit-$(date +%Y%m%d-%H%M%S)"
+DEST_DIR="${XDG_BIN_HOME:-$HOME/.local/bin}"
+CONFIGDIR="${XDG_CONFIG_HOME:-$HOME/.config}"
+BACKUP_ROOT="$CONFIGDIR/theme-profile/backups"
+BACKUP_DIR="$BACKUP_ROOT/deploy-theme-profile-kit-$(date +%Y%m%d-%H%M%S)-$$"
 
 # --help / -h
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
@@ -23,7 +24,7 @@ Options:
   --no-venv     Never build a venv — use the system PySide6 (passed through)
   -h, --help    Show this help message and exit.
 
-Scripts installed to ~/.local/bin:
+Scripts installed to ${XDG_BIN_HOME:-~/.local/bin}:
   theme-profile, theme-menu, wallpaper-picker, wallpaper-next, wallpaper-prev
 
 The GUI is installed by scripts/install-kde-theme-manager.sh (see its --help

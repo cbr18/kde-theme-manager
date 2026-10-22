@@ -30,6 +30,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+from .fileutil import atomic_write_bytes, atomic_write_text, copy_preserving_mode
+from .paths import (
+    active_profile_file,
+    home_dir,
+    live_path,
+    profile_dir,
+    profiles_dir,
+    theme_root,
+    validate_profile_name,
+)
 from .protocol import (
     Choice,
     Result,
@@ -53,7 +63,6 @@ _KDE_FILES = {
 }
 
 _KVANTUM_BASES = (".config/Kvantum", "/usr/share/Kvantum")
-_THEME_ROOT = ".config/theme-profile"
 _NO_APPLY = "KTM_THEME_NO_APPLY"
 
 # Choices providers that point at installed assets: a value outside the list
@@ -75,7 +84,7 @@ _ASSET_CHOICES = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _home() -> Path:
-    return Path.home()
+    return home_dir()
 
 
 def _now_stamp() -> str:
@@ -90,14 +99,26 @@ def _read_text(path: Path) -> Optional[str]:
 
 
 def _atomic_write(path: Path, text: str) -> None:
-    _atomic_write_bytes(path, text.encode("utf-8"))
+    atomic_write_text(path, text)
 
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".ktm-tmp")
-    tmp.write_bytes(data)
-    os.replace(tmp, path)
+    atomic_write_bytes(path, data)
+
+
+def _resolve_under(base: Path, relative: str) -> Path:
+    """Resolve a profile-relative path for a live or snapshot base."""
+    if base == _home():
+        return live_path(relative)
+    return base / relative
+
+
+def _snapshot_relative(path: Path) -> Path:
+    """Stable snapshot key even when XDG points outside ``$HOME``."""
+    try:
+        return path.relative_to(_home())
+    except ValueError:
+        return Path("_external") / Path(*path.parts[1:])
 
 
 def _dedupe(items: Iterable[str]) -> list[str]:
@@ -547,33 +568,49 @@ class PythonThemeCore(ThemeCore):
         self._families: Optional[list[str]] = None
         self._undo: list[_UndoEntry] = []
         self._snapshot_dir: Optional[Path] = None
-        self._snapshotted: set[Path] = set()
+        # First-seen bytes for every file touched in this session.  ``None``
+        # means the file did not exist, which lets revert() remove files that
+        # were created while the inspector was open.
+        self._originals: dict[Path, Optional[bytes]] = {}
 
     # ── paths ─────────────────────────────────────────────────────────────
 
     @property
     def profiles_dir(self) -> Path:
-        return _home() / _THEME_ROOT / "profiles"
+        return profiles_dir()
 
     def _active_profile(self) -> str:
-        path = _home() / _THEME_ROOT / "active-profile"
-        text = _read_text(path)
+        text = _read_text(active_profile_file())
         return text.strip() if text else ""
 
     def _bases(self, scope: str) -> tuple[Path, Path]:
         home = _home()
         active = self._active_profile()
-        compare = self.profiles_dir / active if active else self.profiles_dir
+        if active:
+            try:
+                compare = profile_dir(active)
+            except ValueError:
+                compare = self.profiles_dir
+        else:
+            compare = self.profiles_dir
         if scope.startswith("profile:"):
             name = scope.split(":", 1)[1].strip()
-            return self.profiles_dir / name, home
+            return profile_dir(name), home
         return home, compare
 
-    def _kvantum_file(self, theme: str) -> Optional[Path]:
+    def _kvantum_file(self, theme: str, base: Optional[Path] = None) -> Optional[Path]:
         if not theme:
             return None
-        for base in _KVANTUM_BASES:
-            root = Path(base) if base.startswith("/") else _home() / base
+        profile_base = base is not None and base != _home()
+        for name in _KVANTUM_BASES:
+            if name.startswith("/"):
+                if profile_base:
+                    continue
+                root = Path(name)
+            elif profile_base:
+                root = _resolve_under(base, name)
+            else:
+                root = live_path(name)
             direct = root / f"{theme}.kvconfig"
             if direct.is_file():
                 return direct
@@ -592,15 +629,15 @@ class PythonThemeCore(ThemeCore):
     def _file_for(self, field: FieldDef, base: Path) -> Optional[Path]:
         if field.source == "kvantum":
             theme = self._read_raw(FIELD_BY_ID["kvantum_theme"], base)
-            return self._kvantum_file(str(theme)) if theme else None
+            return self._kvantum_file(str(theme), base) if theme else None
         if not field.file:
             return None
-        path = base / field.file
+        path = _resolve_under(base, field.file)
         if field.source == "userjs" and not path.is_file():
             # Zen profile ids change between installs; use the first profile
             # that has a user.js instead of hard-coding the id.
             try:
-                matches = sorted((base / ".zen").glob("*/user.js"))
+                matches = sorted(_resolve_under(base, ".zen").glob("*/user.js"))
             except OSError:
                 matches = []
             if matches:
@@ -828,7 +865,7 @@ class PythonThemeCore(ThemeCore):
     def _kvantum_choices(self) -> list[Choice]:
         found: list[Choice] = []
         for base in _KVANTUM_BASES:
-            root = Path(base) if base.startswith("/") else _home() / base
+            root = Path(base) if base.startswith("/") else live_path(base)
             try:
                 entries = sorted(root.iterdir(), key=lambda p: p.name)
             except OSError:
@@ -1038,20 +1075,32 @@ class PythonThemeCore(ThemeCore):
         return result.returncode == 0, output
 
     def _snapshot(self, path: Optional[Path]) -> Optional[bytes]:
-        if path is None or not path.is_file():
+        """Record the first-seen state of ``path`` for undo/revert.
+
+        The old implementation only tracked files that already existed, so a
+        revert after creating a config file left the new file behind.  The
+        mapping is per path (not per undo entry), because several fields can
+        touch the same file.
+        """
+        if path is None:
+            return None
+        if path in self._originals:
+            return self._originals[path]
+        if not path.is_file():
+            self._originals[path] = None
             return None
         data = path.read_bytes()
-        if path not in self._snapshotted:
+        self._originals[path] = data
+        if self._snapshot_dir is None:
+            self._snapshot_dir = theme_root() / "backups" / f"inspector-{_now_stamp()}"
+            self._snapshot_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
             try:
-                relative = path.relative_to(_home())
-            except ValueError:
-                return data  # outside $HOME: writable? cannot snapshot safely
-            if self._snapshot_dir is None:
-                self._snapshot_dir = _home() / _THEME_ROOT / "backups" / f"inspector-{_now_stamp()}"
-            target = self._snapshot_dir / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
-            self._snapshotted.add(path)
+                os.chmod(self._snapshot_dir, 0o700)
+            except OSError:
+                pass
+        target = self._snapshot_dir / _snapshot_relative(path.resolve())
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        copy_preserving_mode(path, target)
         return data
 
     def _write_config(self, field: FieldDef, path: Path, value: Any) -> None:
@@ -1084,7 +1133,7 @@ class PythonThemeCore(ThemeCore):
         home = _home()
         if field.source == "kvantum":
             theme = self._read_raw(FIELD_BY_ID["kvantum_theme"], home)
-            path = self._kvantum_file(str(theme)) if theme else None
+            path = self._kvantum_file(str(theme), home) if theme else None
             if path is None:
                 raise FileNotFoundError("active Kvantum theme file not found")
             self._write_config(field, path, value)
@@ -1158,8 +1207,7 @@ class PythonThemeCore(ThemeCore):
         elif hook == "kbuildsycoca":
             self._run(["kbuildsycoca6"], timeout=20)
         elif hook == "kitty":
-            home = _home()
-            config = home / ".config/kitty/kitty.conf"
+            config = live_path(".config/kitty/kitty.conf")
             self._run(
                 ["kitty", "@", "--to", "unix:/tmp/kitty-theme-profile", "load-config", str(config)],
                 timeout=5,
@@ -1248,7 +1296,11 @@ class PythonThemeCore(ThemeCore):
             active = self._active_profile()
             if not active:
                 return Result.err("No active profile")
-            value = self._read_raw(field, self.profiles_dir / active)
+            try:
+                active_dir = profile_dir(active)
+            except ValueError as exc:
+                return Result.err(str(exc))
+            value = self._read_raw(field, active_dir)
             if value is None:
                 return Result.err(f"{field.label} is not stored in the profile")
             return self.set_value(field_id, value)
@@ -1279,25 +1331,25 @@ class PythonThemeCore(ThemeCore):
         return Result.ok(f"Undone: {field.label}")
 
     def revert(self) -> Result:
-        if self._snapshot_dir is None or not self._snapshotted:
+        if not self._originals:
             return Result.ok("No changes in this session")
         touched = [FIELD_BY_ID[entry.field_id] for entry in self._undo]
         restored = 0
-        for path in list(self._snapshotted):
+        for path, original in list(self._originals.items()):
             try:
-                relative = path.relative_to(_home())
-            except ValueError:
-                continue
-            snapshot = self._snapshot_dir / relative
-            if not snapshot.is_file():
-                continue
-            try:
-                _atomic_write_bytes(path, snapshot.read_bytes())
-                restored += 1
+                if original is None:
+                    if path.is_file() or path.is_symlink():
+                        path.unlink()
+                        restored += 1
+                else:
+                    _atomic_write_bytes(path, original)
+                    restored += 1
             except OSError:
                 continue
         self._undo.clear()
-        self._snapshotted.clear()
+        self._originals.clear()
+        # Keep the snapshot directory: it is the only on-disk record of what
+        # a session changed before the user reverted it.
         self._snapshot_dir = None
         self._choices_cache.clear()
 

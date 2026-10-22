@@ -220,14 +220,14 @@ Kirigami.ScrollablePage {
                         Button {
                             text: qsTr("Undo")
                             icon.name: "edit-undo"
-                            enabled: themeInspector.sessionChanges > 0 && !themeInspector.busy
+                            enabled: !themeInspector.readOnly && themeInspector.sessionChanges > 0 && !themeInspector.busy
                             onClicked: themeInspector.undo()
                         }
 
                         Button {
                             text: qsTr("Revert all")
                             icon.name: "document-revert"
-                            enabled: themeInspector.sessionChanges > 0 && !themeInspector.busy
+                            enabled: !themeInspector.readOnly && themeInspector.sessionChanges > 0 && !themeInspector.busy
                             onClicked: themeInspector.revertAll()
                         }
                     }
@@ -503,14 +503,14 @@ Kirigami.ScrollablePage {
                     Button {
                         text: qsTr("Undo last change")
                         icon.name: "edit-undo"
-                        enabled: themeInspector.sessionChanges > 0 && !themeInspector.busy
+                        enabled: !themeInspector.readOnly && themeInspector.sessionChanges > 0 && !themeInspector.busy
                         onClicked: themeInspector.undo()
                     }
 
                     Button {
                         text: qsTr("Revert session")
                         icon.name: "document-revert"
-                        enabled: themeInspector.sessionChanges > 0 && !themeInspector.busy
+                        enabled: !themeInspector.readOnly && themeInspector.sessionChanges > 0 && !themeInspector.busy
                         onClicked: themeInspector.revertAll()
                     }
                 }

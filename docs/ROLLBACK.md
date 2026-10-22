@@ -2,6 +2,11 @@
 
 This document covers all rollback and recovery scenarios for `theme-profile-kit`.
 
+> **Path note.** Examples below use `~/.config/theme-profile/` for brevity. The
+> data root is XDG-aware: `$XDG_CONFIG_HOME/theme-profile/` is used when set,
+> with an existing legacy `~/.config/theme-profile/` kept as a fallback.
+> Profile snapshots themselves always keep the historical `.config/...` layout.
+
 ## Quick Summary
 
 | Scenario | Command |
@@ -61,7 +66,7 @@ When `install-theme-profile-kit.sh` replaces an existing `~/.local/bin/`
 script, the old version is backed up:
 
 ```text
-~/.config/theme-profile/backups/deploy-theme-profile-kit-<YYYYMMDD-HHMMSS>/bin/
+~/.config/theme-profile/backups/deploy-theme-profile-kit-<YYYYMMDD-HHMMSS>-<pid>/bin/
 ```
 
 The GUI installer backs up everything it replaces (the previous app copy, the
@@ -107,8 +112,9 @@ which can also be edited by hand while the app is closed:
 
 ```bash
 python3 - <<'PY'
-import json, pathlib
-path = pathlib.Path.home() / ".config/theme-profile/app-preferences.json"
+import json, os, pathlib
+root = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", pathlib.Path.home() / ".config"))
+path = root / "theme-profile" / "app-preferences.json"
 data = json.loads(path.read_text())
 data["core_backend"] = "python"
 path.write_text(json.dumps(data, indent=2) + "\n")

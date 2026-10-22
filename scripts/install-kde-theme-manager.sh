@@ -231,7 +231,12 @@ fi
 
 exec "$APP_SH" "$@"
 LAUNCHER
-sed -i "s|@KIT_DIR@|$KIT_DIR|g" "$BINDIR/kde-theme-manager"
+# Escape the replacement: a checkout path can contain &, | or a backslash,
+# all of which are special in a sed replacement.
+KIT_DIR_SED="${KIT_DIR//\\/\\\\}"
+KIT_DIR_SED="${KIT_DIR_SED//&/\\&}"
+KIT_DIR_SED="${KIT_DIR_SED//|/\\|}"
+sed -i "s|@KIT_DIR@|$KIT_DIR_SED|g" "$BINDIR/kde-theme-manager"
 chmod 755 "$BINDIR/kde-theme-manager" "$APPDIR/theme-profile-manager.sh"
 
 # ── Desktop entry + icon ────────────────────────────────────────────────────

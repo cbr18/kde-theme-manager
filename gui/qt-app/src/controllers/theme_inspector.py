@@ -24,6 +24,13 @@ from PySide6.QtCore import (
 )
 
 from core import CoreFactory
+from core.paths import (
+    active_profile_file,
+    live_path,
+    profile_dir,
+    profiles_dir as profiles_root,
+    validate_profile_name,
+)
 from core.protocol import ThemeCore
 from core.theme_schema import FIELD_BY_ID, SECTIONS
 
@@ -54,7 +61,10 @@ def _run(owner: QObject, func: Callable[[], tuple[bool, str]],
          done: Callable[[bool, str], None]) -> None:
     signals = _Signals(owner)
     signals.finished.connect(done)
-    signals.finished.connect(signals.deleteLater)
+    # The worker keeps a Python reference to ``signals``.  Calling
+    # deleteLater() here deleted the C++ object while the worker still held the
+    # wrapper, which produced a SIGBUS in QObject::~QObject.  Parent ownership
+    # (passed to _Signals) keeps the object alive for the controller.
     QThreadPool.globalInstance().start(_Worker(func, signals))
 
 
@@ -103,19 +113,28 @@ class ThemeInspectorController(QObject):
 
     @Property(list, notify=scopeChanged)
     def scopes(self) -> list:
-        root = Path.home() / ".config" / "theme-profile" / "profiles"
         try:
-            names = sorted(p.name for p in root.iterdir() if p.is_dir())
+            names = sorted(
+                p.name for p in profiles_root().iterdir()
+                if p.is_dir() and not p.is_symlink()
+            )
         except OSError:
             names = []
-        return ["live"] + [f"profile:{name}" for name in names]
+        valid = []
+        for name in names:
+            try:
+                validate_profile_name(name)
+            except ValueError:
+                continue
+            valid.append(name)
+        return ["live"] + [f"profile:{name}" for name in valid]
 
     @Property(str, notify=sectionsChanged)
     def activeProfile(self) -> str:
-        path = Path.home() / ".config" / "theme-profile" / "active-profile"
         try:
-            return path.read_text(encoding="utf-8").strip()
-        except OSError:
+            name = active_profile_file().read_text(encoding="utf-8").strip()
+            return validate_profile_name(name)
+        except (OSError, ValueError):
             return ""
 
     @Property(str, notify=sectionsChanged)
@@ -207,6 +226,11 @@ class ThemeInspectorController(QObject):
         """
         if not name:
             return {}
+        try:
+            validate_profile_name(name)
+            root = profile_dir(name)
+        except ValueError:
+            return {}
 
         scope = f"profile:{name}"
 
@@ -233,12 +257,6 @@ class ThemeInspectorController(QObject):
 
         # A broken or unreadable profile should still render a card; the stats
         # are a nicety, not a requirement.
-        profiles_dir = getattr(self._core, "profiles_dir", None)
-        root = (
-            profiles_dir / name
-            if profiles_dir is not None
-            else Path.home() / ".config" / "theme-profile" / "profiles" / name
-        )
         size_bytes = 0
         file_count = 0
         try:
@@ -281,8 +299,14 @@ class ThemeInspectorController(QObject):
 
     @Slot(str)
     def setScope(self, scope: str) -> None:
-        if scope != "live" and not scope.startswith("profile:"):
-            return
+        if scope != "live":
+            if not scope.startswith("profile:"):
+                return
+            try:
+                validate_profile_name(scope.split(":", 1)[1])
+            except ValueError:
+                self.toast.emit("Invalid profile name", False)
+                return
         if scope == self._scope:
             return
         self._scope = scope
@@ -297,11 +321,7 @@ class ThemeInspectorController(QObject):
             self.busyChanged.emit()
 
     def _write(self, field_id: str, value: object) -> None:
-        if self._scope != "live":
-            self.toast.emit("Profile snapshots are read-only", False)
-            return
-        if self._busy:
-            self.toast.emit("Another change is still being applied", False)
+        if not self._can_edit_live():
             return
 
         def work() -> tuple[bool, str]:
@@ -342,8 +362,7 @@ class ThemeInspectorController(QObject):
 
     @Slot(str)
     def resetToProfile(self, field_id: str) -> None:
-        if self._scope != "live":
-            self.toast.emit("Profile snapshots are read-only", False)
+        if not self._can_edit_live():
             return
 
         def work() -> tuple[bool, str]:
@@ -358,8 +377,20 @@ class ThemeInspectorController(QObject):
         self._set_busy(True)
         _run(self, work, done)
 
+    def _can_edit_live(self) -> bool:
+        if self._scope != "live":
+            self.toast.emit("Profile snapshots are read-only", False)
+            return False
+        if self._busy:
+            self.toast.emit("Another change is still being applied", False)
+            return False
+        return True
+
     @Slot()
     def undo(self) -> None:
+        if not self._can_edit_live():
+            return
+
         def work() -> tuple[bool, str]:
             result = self._core.undo()
             return result.success, result.message
@@ -373,6 +404,9 @@ class ThemeInspectorController(QObject):
 
     @Slot()
     def revertAll(self) -> None:
+        if not self._can_edit_live():
+            return
+
         def work() -> tuple[bool, str]:
             result = self._core.revert()
             return result.success, result.message
@@ -468,7 +502,7 @@ class ThemeInspectorController(QObject):
             return
         path = Path(relative)
         if not path.is_absolute():
-            path = Path.home() / relative
+            path = live_path(relative)
         target = path if path.is_dir() else path.parent
         try:
             subprocess.Popen(["xdg-open", str(target)])

@@ -34,8 +34,23 @@ for arg in "$@"; do
 done
 
 BINDIR="${XDG_BIN_HOME:-$HOME/.local/bin}"
-THEMEDIR="$HOME/.config/theme-profile"
+CONFIGDIR="${XDG_CONFIG_HOME:-$HOME/.config}"
+THEMEDIR="$CONFIGDIR/theme-profile"
+# A pre-XDG installation may still live under ~/.config.
+if [ ! -d "$THEMEDIR" ] && [ -n "${XDG_CONFIG_HOME:-}" ] && [ -d "${HOME}/.config/theme-profile" ]; then
+  THEMEDIR="${HOME}/.config/theme-profile"
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Ask before deleting anything.  The previous order removed the GUI first and
+# only then asked, so answering "no" left a half-uninstalled application.
+if [ "$FORCE" -eq 0 ] && [ -e "$THEMEDIR" ]; then
+  read -r -p "This will remove all profiles, backups, and metadata in $THEMEDIR. Continue? [y/N] " resp
+  case "$resp" in
+    [yY]*) ;;
+    *) say "Aborted."; exit 0 ;;
+  esac
+fi
 
 if [ "$WITH_GUI" -eq 1 ] && [ -x "$SCRIPT_DIR/uninstall-kde-theme-manager.sh" ]; then
   "$SCRIPT_DIR/uninstall-kde-theme-manager.sh" --force
@@ -48,16 +63,8 @@ rm -f "$BINDIR/wallpaper-picker"
 rm -f "$BINDIR/wallpaper-next"
 rm -f "$BINDIR/wallpaper-prev"
 
-if [ "$FORCE" -eq 0 ]; then
-  read -r -p "This will remove all profiles, backups, and metadata in $THEMEDIR. Continue? [y/N] " resp
-  case "$resp" in
-    [yY]*) ;;
-    *) say "Aborted."; exit 0 ;;
-  esac
-fi
-
 say "Removing: $THEMEDIR"
 rm -rf "$THEMEDIR"
 
 say "Готово. theme-profile-kit полностью удалён."
-say "Конфиги wofi (.config/wofi/*.css) и настройки приложений не тронуты."
+say "Конфиги wofi ($CONFIGDIR/wofi/*.css) и настройки приложений не тронуты."

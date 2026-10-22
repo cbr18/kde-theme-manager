@@ -46,6 +46,22 @@ Kirigami.ApplicationWindow {
         pageStack.layers.push(Qt.resolvedUrl("pages/ThemePage.qml"))
     }
 
+    // Applying a profile can restart Plasma components, so honour the
+    // "Confirm before applying" preference instead of hard-wiring a click to
+    // the controller.  The preview dialog already acts as a confirmation.
+    function requestApply(profileName, alreadyConfirmed) {
+        if (profileName === "")
+            return
+        if (!alreadyConfirmed
+                && typeof settingsController !== "undefined"
+                && settingsController.confirmBeforeApply) {
+            applyDialog.targetProfile = profileName
+            applyDialog.open()
+            return
+        }
+        profileController.applyProfile(profileName)
+    }
+
     // Last active profile we observed. Used to distinguish "the user changed
     // the selection" from "the controller just refreshed the active profile".
     property string _lastActive: ""
@@ -191,7 +207,7 @@ Kirigami.ApplicationWindow {
                             highlighted: true
                             enabled: !root.applying && root.selectedProfile !== ""
                                 && root.selectedProfile !== profileController.activeProfile
-                            onClicked: profileController.applyProfile(root.selectedProfile)
+                            onClicked: root.requestApply(root.selectedProfile)
                         }
                     }
 
@@ -294,7 +310,7 @@ Kirigami.ApplicationWindow {
                                 root.selectedProfile = profileName
                             }
                             onApplyClicked: function(profileName) {
-                                profileController.applyProfile(profileName)
+                                root.requestApply(profileName)
                             }
                             onPreviewClicked: function(profileName) {
                                 previewDialog.previewProfile = profileName
@@ -420,6 +436,36 @@ Kirigami.ApplicationWindow {
     // Dialogs
     // ──────────────────────────────────────────────────────────────
     Kirigami.Dialog {
+        id: applyDialog
+        title: qsTr("Apply Profile")
+        standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
+        preferredWidth: 420
+        property string targetProfile: ""
+
+        background: Rectangle {
+            color: ThemeColors.dialogBg(root.glassMode)
+            radius: 8
+            border.width: 1
+            border.color: ThemeColors.cardBorder(root.glassMode)
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: ThemeColors.fgColor(root.glassMode)
+                text: qsTr("Apply profile \"%1\"? This can restart Plasma components and change the current desktop appearance.").arg(applyDialog.targetProfile)
+            }
+        }
+
+        onAccepted: {
+            if (applyDialog.targetProfile !== "")
+                profileController.applyProfile(applyDialog.targetProfile)
+        }
+    }
+
+    Kirigami.Dialog {
         id: confirmDialog
         title: qsTr("Delete Profile")
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
@@ -473,14 +519,27 @@ Kirigami.ApplicationWindow {
                 id: nameField
                 Layout.fillWidth: true
                 placeholderText: qsTr("Profile name")
+                onTextChanged: saveError.visible = false
+            }
+            Label {
+                id: saveError
+                Layout.fillWidth: true
+                visible: false
+                wrapMode: Text.WordWrap
+                color: ThemeColors.negative()
+                text: qsTr("Use letters, digits, dots, dashes or underscores; the first character must not be a dot.")
             }
         }
 
         onAccepted: {
-            if (nameField.text.trim() !== "") {
-                profileController.saveProfile(nameField.text.trim())
-                nameField.text = ""
+            var name = nameField.text.trim()
+            if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)) {
+                saveError.visible = true
+                saveDialog.open()
+                return
             }
+            profileController.saveProfile(name)
+            nameField.text = ""
         }
     }
 
@@ -678,6 +737,6 @@ Kirigami.ApplicationWindow {
             }
         }
 
-        onAccepted: profileController.applyProfile(previewDialog.previewProfile)
+        onAccepted: root.requestApply(previewDialog.previewProfile, true)
     }
 }

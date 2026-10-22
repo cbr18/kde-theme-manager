@@ -1,21 +1,24 @@
 """
-System Tray & Global Hotkey Controller.
+System Tray Controller.
 
 Provides:
 - System tray icon with context menu (if available)
 - Quick profile switching straight from the tray
 - Quick wallpaper navigation
 - Desktop notifications for background operations
-- Global hotkey (Meta+T by default) to show/hide window
 - Minimize to tray instead of close
+
+A configurable global hotkey was removed: KGlobalAccel only creates a component
+object for applications that install a desktop entry carrying
+``X-KDE-GlobalAccel-CommandShortcut=true``, so a bare D-Bus ``doRegister`` never
+produced a working shortcut and the setting was dead.
 """
 
 from __future__ import annotations
 
 import os
-from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer, QCoreApplication
-from PySide6.QtGui import QGuiApplication, QIcon, QAction, QActionGroup
-from PySide6.QtDBus import QDBusConnection, QDBusMessage
+from PySide6.QtCore import QObject, Signal, Slot, Property, QCoreApplication
+from PySide6.QtGui import QAction, QActionGroup
 
 from app_icon import app_icon
 
@@ -38,10 +41,9 @@ def _import_widgets():
 
 
 class SystemTrayController(QObject):
-    """Управляет системным треем и глобальными хоткеями."""
+    """Управляет системным треем."""
 
     trayIconVisibleChanged = Signal(bool)
-    hotkeyPressed = Signal()
 
     _instance = None
 
@@ -65,10 +67,8 @@ class SystemTrayController(QObject):
         self._profile_controller = None
         self._wallpaper_controller = None
         self._pending_profile = ""
-        self._hotkey_enabled = True
-        self._hotkey_sequence = "Meta+T"
         self._minimize_to_tray = False
-        self._native_filter = None
+        self._notify_on_success = True
 
     @classmethod
     def instance(cls) -> "SystemTrayController":
@@ -105,30 +105,6 @@ class SystemTrayController(QObject):
     def trayIconVisible(self) -> bool:
         return self._tray_icon is not None and self._tray_icon.isVisible()
 
-    @Property(bool, notify=hotkeyPressed)
-    def hotkeyEnabled(self) -> bool:
-        return self._hotkey_enabled
-
-    @hotkeyEnabled.setter
-    def hotkeyEnabled(self, value: bool) -> None:
-        if self._hotkey_enabled != value:
-            self._hotkey_enabled = value
-            if value:
-                self._register_hotkey()
-            else:
-                self._unregister_hotkey()
-
-    @Property(str, notify=hotkeyPressed)
-    def hotkeySequence(self) -> str:
-        return self._hotkey_sequence
-
-    @hotkeySequence.setter
-    def hotkeySequence(self, value: str) -> None:
-        if self._hotkey_sequence != value:
-            self._hotkey_sequence = value
-            if self._hotkey_enabled:
-                self._register_hotkey()
-
     @Property(bool)
     def minimizeToTray(self) -> bool:
         return self._minimize_to_tray
@@ -138,15 +114,12 @@ class SystemTrayController(QObject):
         self._minimize_to_tray = value
 
     def initialize(self) -> None:
-        """Инициализировать трей и хоткей."""
+        """Инициализировать трей."""
         try:
             self._create_tray_icon()
         except Exception as e:
             print(f"System tray not available: {e}")
             self._tray_icon = None
-
-        if self._hotkey_enabled:
-            self._register_hotkey()
 
     def _create_tray_icon(self) -> None:
         """Создать иконку в системном трее."""
@@ -347,10 +320,11 @@ class SystemTrayController(QObject):
             # An operation started from the GUI — it reports for itself.
             return
         if success:
-            self._notify(
-                QCoreApplication.translate("SystemTray", "Profile applied"),
-                message or name,
-            )
+            if self._notify_on_success:
+                self._notify(
+                    QCoreApplication.translate("SystemTray", "Profile applied"),
+                    message or name,
+                )
         else:
             self._notify(
                 QCoreApplication.translate("SystemTray", "Could not apply profile"),
@@ -415,51 +389,8 @@ class SystemTrayController(QObject):
                 self._main_window.raise_()
                 self._main_window.requestActivate()
 
-    @Slot()
-    def toggle_window(self) -> None:
-        """Слот для вызова из QML (global hotkey)."""
-        self._toggle_window_visibility()
-        self.hotkeyPressed.emit()
-
-    def _register_hotkey(self) -> None:
-        """Зарегистрировать глобальный хоткей через KGlobalAccel (KWin)."""
-        try:
-            # Через KGlobalAccel D-Bus
-            bus = QDBusConnection.sessionBus()
-            msg = QDBusMessage.createMethodCall(
-                "org.kde.kglobalaccel",
-                "/kglobalaccel",
-                "org.kde.kglobalaccel",
-                "setShortcut"
-            )
-            msg.setArguments([
-                "org.kde.theme-manager",  # component name
-                "toggle_window",           # action name
-                self._hotkey_sequence      # shortcut
-            ])
-            QDBusConnection.sessionBus().asyncCall(msg)
-        except Exception:
-            pass
-
-    def _unregister_hotkey(self) -> None:
-        """Отменить регистрацию хоткея."""
-        try:
-            bus = QDBusConnection.sessionBus()
-            msg = QDBusMessage.createMethodCall(
-                "org.kde.kglobalaccel",
-                "/kglobalaccel",
-                "org.kde.kglobalaccel",
-                "removeShortcut"
-            )
-            msg.setArguments(["org.kde.theme-manager", "toggle_window"])
-            QDBusConnection.sessionBus().asyncCall(msg)
-        except Exception:
-            pass
-
-    def set_hotkey(self, sequence: str) -> None:
-        """Установить новый хоткей."""
-        self._hotkey_sequence = sequence
-        self._register_hotkey()
+    def set_notify_on_success(self, value: bool) -> None:
+        self._notify_on_success = bool(value)
 
 
 def register_system_tray(engine, main_window, main_controller=None) -> None:
@@ -481,11 +412,13 @@ def register_system_tray(engine, main_window, main_controller=None) -> None:
 
         settings = main_controller.settings
         controller.minimizeToTray = settings.minimizeToTray
+        controller.set_notify_on_success(settings.notifyOnSuccess)
 
-        def _sync_minimize_to_tray() -> None:
+        def _sync_settings() -> None:
             controller.minimizeToTray = settings.minimizeToTray
+            controller.set_notify_on_success(settings.notifyOnSuccess)
 
-        settings.settingsChanged.connect(_sync_minimize_to_tray)
+        settings.settingsChanged.connect(_sync_settings)
 
     controller.initialize()
     engine.rootContext().setContextProperty("trayController", controller)

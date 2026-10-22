@@ -7,6 +7,7 @@
 
 pub mod types;
 pub mod ffi;
+pub mod paths;
 pub mod profile;
 pub mod wallpaper;
 pub mod tracked_apps;
@@ -49,6 +50,17 @@ fn take_last_error() -> Option<String> {
     }
 }
 
+/// Read a borrowed C string argument without dereferencing NULL.
+fn read_cstr(ptr: *const c_char, name: &str) -> Result<String, String> {
+    if ptr.is_null() {
+        return Err(format!("{name} is null"));
+    }
+    unsafe { CStr::from_ptr(ptr) }
+        .to_str()
+        .map(str::to_owned)
+        .map_err(|e| e.to_string())
+}
+
 /// Initialize the Rust core library
 #[no_mangle]
 pub extern "C" fn kde_theme_core_init() -> c_int {
@@ -75,6 +87,7 @@ pub extern "C" fn kde_theme_core_get_error() -> *const c_char {
 }
 
 /// Free a string returned by FFI functions
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn kde_theme_core_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
@@ -134,33 +147,33 @@ pub extern "C" fn kde_theme_core_profile_apply(
     profile_name: *const c_char,
     components_json: *const c_char,
 ) -> c_int {
-    let name = match unsafe { CStr::from_ptr(profile_name) }.to_str() {
+    let name = match read_cstr(profile_name, "profile_name") {
         Ok(s) => s,
         Err(e) => {
-            set_last_error(e.to_string());
+            set_last_error(e);
             return -1;
         }
     };
 
-    let components = if components_json.is_null() {
+    let components: Option<Vec<String>> = if components_json.is_null() {
         None
     } else {
-        match unsafe { CStr::from_ptr(components_json) }.to_str() {
-            Ok(s) => match serde_json::from_str(s) {
+        match read_cstr(components_json, "components_json") {
+            Ok(s) => match serde_json::from_str::<Vec<String>>(&s) {
                 Ok(c) => Some(c),
                 Err(e) => {
                     set_last_error(e.to_string());
                     return -1;
                 }
-            }
+            },
             Err(e) => {
-                set_last_error(e.to_string());
+                set_last_error(e);
                 return -1;
             }
         }
     };
 
-    match profile::apply_profile(name, components) {
+    match profile::apply_profile(&name, components) {
         Ok(_) => 0,
         Err(e) => {
             set_last_error(e.to_string());
@@ -175,33 +188,33 @@ pub extern "C" fn kde_theme_core_profile_save(
     profile_name: *const c_char,
     components_json: *const c_char,
 ) -> c_int {
-    let name = match unsafe { CStr::from_ptr(profile_name) }.to_str() {
+    let name = match read_cstr(profile_name, "profile_name") {
         Ok(s) => s,
         Err(e) => {
-            set_last_error(e.to_string());
+            set_last_error(e);
             return -1;
         }
     };
 
-    let components = if components_json.is_null() {
+    let components: Option<Vec<String>> = if components_json.is_null() {
         None
     } else {
-        match unsafe { CStr::from_ptr(components_json) }.to_str() {
-            Ok(s) => match serde_json::from_str(s) {
+        match read_cstr(components_json, "components_json") {
+            Ok(s) => match serde_json::from_str::<Vec<String>>(&s) {
                 Ok(c) => Some(c),
                 Err(e) => {
                     set_last_error(e.to_string());
                     return -1;
                 }
-            }
+            },
             Err(e) => {
-                set_last_error(e.to_string());
+                set_last_error(e);
                 return -1;
             }
         }
     };
 
-    match profile::save_profile(name, components) {
+    match profile::save_profile(&name, components) {
         Ok(_) => 0,
         Err(e) => {
             set_last_error(e.to_string());
@@ -213,15 +226,15 @@ pub extern "C" fn kde_theme_core_profile_save(
 /// FFI wrapper for deleting a profile
 #[no_mangle]
 pub extern "C" fn kde_theme_core_profile_delete(profile_name: *const c_char) -> c_int {
-    let name = match unsafe { CStr::from_ptr(profile_name) }.to_str() {
+    let name = match read_cstr(profile_name, "profile_name") {
         Ok(s) => s,
         Err(e) => {
-            set_last_error(e.to_string());
+            set_last_error(e);
             return -1;
         }
     };
 
-    match profile::delete_profile(name) {
+    match profile::delete_profile(&name) {
         Ok(_) => 0,
         Err(e) => {
             set_last_error(e.to_string());
@@ -236,22 +249,22 @@ pub extern "C" fn kde_theme_core_profile_diff(
     profile_a: *const c_char,
     profile_b: *const c_char,
 ) -> *mut c_char {
-    let a = match unsafe { CStr::from_ptr(profile_a) }.to_str() {
+    let a = match read_cstr(profile_a, "profile_a") {
         Ok(s) => s,
         Err(e) => {
-            set_last_error(e.to_string());
+            set_last_error(e);
             return ptr::null_mut();
         }
     };
-    let b = match unsafe { CStr::from_ptr(profile_b) }.to_str() {
+    let b = match read_cstr(profile_b, "profile_b") {
         Ok(s) => s,
         Err(e) => {
-            set_last_error(e.to_string());
+            set_last_error(e);
             return ptr::null_mut();
         }
     };
 
-    match profile::diff_profiles(a, b) {
+    match profile::diff_profiles(&a, &b) {
         Ok(diff) => match CString::new(diff) {
             Ok(c_str) => c_str.into_raw(),
             Err(e) => {
@@ -271,15 +284,15 @@ pub extern "C" fn kde_theme_core_profile_diff(
 pub extern "C" fn kde_theme_core_profile_get_components(
     profile_name: *const c_char,
 ) -> *mut c_char {
-    let name = match unsafe { CStr::from_ptr(profile_name) }.to_str() {
+    let name = match read_cstr(profile_name, "profile_name") {
         Ok(s) => s,
         Err(e) => {
-            set_last_error(e.to_string());
+            set_last_error(e);
             return ptr::null_mut();
         }
     };
 
-    match profile::get_profile_components(name) {
+    match profile::get_profile_components(&name) {
         Ok(comps) => match serde_json::to_string(&comps) {
             Ok(json) => match CString::new(json) {
                 Ok(c_str) => c_str.into_raw(),
@@ -387,15 +400,15 @@ pub extern "C" fn kde_theme_core_wallpaper_list() -> *mut c_char {
 /// FFI wrapper for WallpaperCore - set wallpaper
 #[no_mangle]
 pub extern "C" fn kde_theme_core_wallpaper_set(path: *const c_char) -> c_int {
-    let p = match unsafe { CStr::from_ptr(path) }.to_str() {
+    let p = match read_cstr(path, "path") {
         Ok(s) => s,
         Err(e) => {
-            set_last_error(e.to_string());
+            set_last_error(e);
             return -1;
         }
     };
 
-    match wallpaper::set_wallpaper(p) {
+    match wallpaper::set_wallpaper(&p) {
         Ok(_) => 0,
         Err(e) => {
             set_last_error(e.to_string());
@@ -415,13 +428,13 @@ pub extern "C" fn kde_theme_core_wallpaper_set_dir(dir: *const c_char) -> c_int 
         return 0;
     }
 
-    match unsafe { CStr::from_ptr(dir) }.to_str() {
+    match read_cstr(dir, "dir") {
         Ok(s) => {
-            wallpaper::set_wallpaper_dir(s);
+            wallpaper::set_wallpaper_dir(&s);
             0
         }
         Err(e) => {
-            set_last_error(e.to_string());
+            set_last_error(e);
             -1
         }
     }
@@ -478,15 +491,15 @@ pub extern "C" fn kde_theme_core_apps_get_categories() -> *mut c_char {
 /// FFI wrapper for TrackedAppsCore - get components by category
 #[no_mangle]
 pub extern "C" fn kde_theme_core_apps_get_by_category(category: *const c_char) -> *mut c_char {
-    let cat = match unsafe { CStr::from_ptr(category) }.to_str() {
+    let cat = match read_cstr(category, "category") {
         Ok(s) => s,
         Err(e) => {
-            set_last_error(e.to_string());
+            set_last_error(e);
             return ptr::null_mut();
         }
     };
 
-    match tracked_apps::get_components_by_category(cat) {
+    match tracked_apps::get_components_by_category(&cat) {
         Ok(comps) => match serde_json::to_string(&comps) {
             Ok(json) => match CString::new(json) {
                 Ok(c_str) => c_str.into_raw(),
@@ -582,15 +595,15 @@ pub extern "C" fn kde_theme_core_settings_load() -> *mut c_char {
 /// FFI wrapper for SettingsCore - save settings
 #[no_mangle]
 pub extern "C" fn kde_theme_core_settings_save(settings_json: *const c_char) -> c_int {
-    let json_str = match unsafe { CStr::from_ptr(settings_json) }.to_str() {
+    let json_str = match read_cstr(settings_json, "settings_json") {
         Ok(s) => s,
         Err(e) => {
-            set_last_error(e.to_string());
+            set_last_error(e);
             return -1;
         }
     };
 
-    let settings: AppSettings = match serde_json::from_str(json_str) {
+    let settings: AppSettings = match serde_json::from_str(&json_str) {
         Ok(s) => s,
         Err(e) => {
             set_last_error(e.to_string());

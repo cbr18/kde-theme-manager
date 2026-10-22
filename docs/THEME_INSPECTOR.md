@@ -1,6 +1,7 @@
 # Theme Inspector — экран «Тема»: UX-анализ и архитектура
 
-> **Статус**: предложение (не реализовано).
+> **Статус**: реализовано (Phases 0–3) в `gui/qt-app/` — страница **Theme**,
+> read-only скопы профилей, live-правки с Undo/Revert, экспорт JSON.
 > **Связано**: [ROADMAP.md](ROADMAP.md), [CURRENT_APP.md](CURRENT_APP.md), [TZ-QT-APP.md](TZ-QT-APP.md)
 > **Вопрос**: как показать, что внутри темы, и дать править это прямо в приложении.
 
@@ -20,7 +21,7 @@
 
 | Поверхность | Что показывает | Чего не хватает |
 |---|---|---|
-| Карточка профиля | имя, «N components», до 8 чипов, кнопки Apply/Preview/Diff/Delete | что *внутри*: accent, Kvantum, blur, радиус, опасити |
+| Карточка профиля | имя, свотчи палитры, отпечаток темы (accent/Kvantum/blur/радиус), дата сохранения, размер, число компонентов, кнопки Apply/Preview/Diff/Inspect/Delete | что *внутри* по каждому полю (есть в Theme) |
 | `Preview` | список компонентов + сырой `diff -ru` на 4000+ строк | человекочитаемые поля «было → станет» |
 | `theme-profile status` | ~40 плоских `key=value` | значения с типами, дефолты, валидация; часть строк битая (JSON/zed) |
 | Settings | настройки *приложения* | настройки *темы* |
@@ -208,10 +209,10 @@ Drawer
 ```
 Glass                                    ✓ active
 #808e47 · OrchisDark · blur 11 · r10 · 0.5
-[24 components]  [Apply] [Preview] [Diff] [Delete]
+[saved 2026-01-15 · 3.4 MB · 24 components]   [Apply] [Preview] [Diff] [Inspect] [Delete]
 ```
 
-Считается из тех же полей схемы (accent, kvantum, blur, radius, kitty opacity). Если поле недоступно — пропускаем.
+Считается из тех же полей схемы (accent, kvantum, blur, radius, kitty opacity). Если поле недоступно — пропускаем. Дублирующие чипы компонентов убраны: все профили отслеживают один и тот же набор, поэтому чипы ничего не сообщали.
 
 ### 5.3. Theme — обзор
 
@@ -474,15 +475,16 @@ class ThemeCore(ABC):
 
 ## 14. Найденные баги (повод для Phase 0)
 
-1. **`LookAndFeelPackage` = текст `--help`.** В `files/bin/theme-profile`:
-   ```bash
-   kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage "$source/.config/kdeglobals"
-   ```
-   Лишний позиционный аргумент → kreadconfig6 печатает usage, и `apply_live_hooks` записывает его в `kdeglobals`. Испорчены live-конфиг и профиль `glass`; `theme-profile status` это показывает.
-   Фикс: `kreadconfig6 --file "$source/.config/kdeglobals" --group KDE --key LookAndFeelPackage`; затем восстановить значение `glass`.
-2. **`status` для zed/vscode/obsidian** отдаёт обрывки JSON (`"mode": "dark",`, `"workbench.colorTheme": …`, `{}`) — парсить нормально.
+1. **`LookAndFeelPackage` = текст `--help`.** ✅ **Исправлено.** `apply_live_hooks`
+   теперь читает значение из профиля без лишнего позиционного аргумента;
+   `tests/test-scripts.sh` (section 13) проверяет, что в `kdeglobals` не
+   попадает текст usage.
+2. **`status` для zed/vscode/obsidian** отдаёт обрывки JSON (`"mode": "dark",`,
+   `"workbench.colorTheme": …`, `{}`) — парсить нормально.
 3. **`kwin_glass` пуст**, хотя glass-профиль использует `better_blur_dx` — в статусе нет ясности, какой эффект реально включён; брать `loadedEffects` из D-Bus.
-4. **Курсорная тема не отслеживается** (`kcminputrc` отсутствует в `COMPONENT_PATHS`) — GTK-курсор и KDE-курсор могут расходиться. Решить: добавить `cursor`-компонент (меняет состав профилей — делать осознанно).
+4. **Курсорная тема не отслеживается.** Решение: курсор остаётся **live-only**
+   (`kcminputrc` не входит в профиль), чтобы не менять состав существующих
+   снимков; Theme Inspector показывает и меняет его в live-скопе.
 
 ---
 

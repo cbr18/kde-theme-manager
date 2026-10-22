@@ -4,9 +4,12 @@ Theme Controller — Dogfooding: применяет активный профи�
 Поддерживает: glass (прозрачность + KWin blur), paper, dark, light, system.
 """
 
+import os
 import subprocess
 from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer, Qt
 from PySide6.QtGui import QGuiApplication, QWindow, QColor, QPalette
+
+from core.paths import live_path
 
 
 class ThemeController(QObject):
@@ -36,6 +39,15 @@ class ThemeController(QObject):
         self._update_timer = QTimer(self)
         self._update_timer.setSingleShot(True)
         self._update_timer.timeout.connect(self._apply_theme)
+
+        # "System" must follow live changes instead of being resolved once at
+        # startup.  colorSchemeChanged exists on Qt 6.5+.
+        try:
+            hints = QGuiApplication.styleHints()
+            if hints is not None and hasattr(hints, "colorSchemeChanged"):
+                hints.colorSchemeChanged.connect(self._on_system_color_scheme_changed)
+        except Exception:
+            pass
 
     @classmethod
     def instance(cls) -> "ThemeController":
@@ -69,6 +81,11 @@ class ThemeController(QObject):
 
     def _schedule_apply(self) -> None:
         self._update_timer.start(50)
+
+    @Slot()
+    def _on_system_color_scheme_changed(self) -> None:
+        if self._current_theme == "system":
+            self._schedule_apply()
 
     @Slot()
     def _apply_theme(self) -> None:
@@ -212,13 +229,14 @@ class ThemeController(QObject):
 
     def _request_kwin_blur(self) -> None:
         """Запросить KWin blur через D-Bus (works on Wayland)."""
+        if os.environ.get("KTM_THEME_NO_APPLY") == "1":
+            return
         try:
-            # Попытка через qdbus6
             subprocess.run([
-                "qdbus6", "org.kde.KWin", "/KWin",
-                "org.kde.KWin.loadEffect", "blur"
-            ], capture_output=True, timeout=1)
-        except Exception:
+                "qdbus6", "org.kde.KWin", "/Effects",
+                "org.kde.kwin.Effects.loadEffect", "blur"
+            ], capture_output=True, timeout=2)
+        except (OSError, subprocess.SubprocessError):
             pass
 
     def _apply_paper_theme(self) -> None:
@@ -252,10 +270,9 @@ class ThemeController(QObject):
     def _detect_from_kdeglobals(self) -> None:
         """Определить тему из kdeglobals."""
         try:
-            from pathlib import Path
             import configparser
 
-            kdeglobals = Path.home() / ".config/kdeglobals"
+            kdeglobals = live_path(".config/kdeglobals")
             if kdeglobals.exists():
                 config = configparser.ConfigParser()
                 config.read(kdeglobals)

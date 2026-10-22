@@ -129,6 +129,56 @@ for bad_name in "../x" "a b" "a/b" "a;b" "a|b" "a\$b" ""; do
   fi
 done
 
+# Re-saving with a smaller component set must not keep files from the old
+# snapshot (the old implementation copied into the existing directory).
+mkdir -p "$FAKE_HOME/.config"
+printf '[General]\nAccentColor=1,2,3\n' > "$FAKE_HOME/.config/kdeglobals"
+printf '[General]\nBorderSize=1\n' > "$FAKE_HOME/.config/kwinrc"
+HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" save components-test   --components=kwin,kdeglobals >/dev/null 2>&1
+profile_root="$FAKE_HOME/.config/theme-profile/profiles/components-test"
+if [ -f "$profile_root/.config/kwinrc" ] && [ -f "$profile_root/.config/kdeglobals" ]; then
+  ok "save with an explicit component set copies those files"
+else
+  fail "save with an explicit component set is missing files"
+fi
+HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" save components-test   --components=kdeglobals >/dev/null 2>&1
+if [ ! -e "$profile_root/.config/kwinrc" ] && [ -f "$profile_root/.config/kdeglobals" ]; then
+  ok "re-saving a profile removes stale component files"
+else
+  fail "re-saving a profile kept stale component files"
+fi
+
+if HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" apply ../x >/dev/null 2>&1; then
+  fail "apply '../x' should have been rejected"
+else
+  ok "apply '../x' correctly rejected"
+fi
+if HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" diff test-profile ../x >/dev/null 2>&1; then
+  fail "diff '../x' should have been rejected"
+else
+  ok "diff '../x' correctly rejected"
+fi
+if HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" apply components-test --components= >/dev/null 2>&1; then
+  fail "apply with an empty component list should be rejected"
+else
+  ok "apply with an empty component list is rejected"
+fi
+
+# XDG_CONFIG_HOME/XDG_DATA_HOME must be honoured for live files while the
+# snapshot keeps the historical .config layout.
+XDG_HOME="$TMP_ROOT/xdg-home"
+XDG_CONFIG="$XDG_HOME/config"
+XDG_DATA="$XDG_HOME/data"
+mkdir -p "$XDG_CONFIG" "$XDG_DATA"
+printf '[General]\nAccentColor=9,8,7\n' > "$XDG_CONFIG/kdeglobals"
+if HOME="$XDG_HOME" XDG_CONFIG_HOME="$XDG_CONFIG" XDG_DATA_HOME="$XDG_DATA" \
+  "$SCRIPT_DIR/files/bin/theme-profile" save xdg-profile --components=kdeglobals >/dev/null 2>&1 \
+  && [ -f "$XDG_CONFIG/theme-profile/profiles/xdg-profile/.config/kdeglobals" ]; then
+  ok "XDG_CONFIG_HOME is used for profiles and live config"
+else
+  fail "XDG_CONFIG_HOME was ignored"
+fi
+
 # --- 5. theme-profile: apply nonexistent → fails fast (no side effects) ------
 echo "=== Section 5: apply nonexistent doesn't break Plasma ==="
 

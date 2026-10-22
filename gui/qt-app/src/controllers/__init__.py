@@ -21,6 +21,7 @@ from core.python_core import (
     PythonProfileCore, PythonWallpaperCore, PythonTrackedAppsCore, PythonSettingsCore
 )
 from core import CoreFactory
+from core.paths import validate_profile_name
 from .theme_inspector import ThemeInspectorController
 
 
@@ -167,6 +168,7 @@ class ProfileController(QObject):
         Повторный запрос во время выполнения игнорируется.
         """
         if self._busy:
+            self.operationFinished.emit(False, "Another operation is still running")
             return
         self._set_busy(True)
         self.operationStarted.emit(name)
@@ -180,13 +182,28 @@ class ProfileController(QObject):
         if success:
             self._refresh_timer.start(500)  # небольшая задержка для применения
 
+    def _settings_components(self) -> tuple[Optional[list[str]], str]:
+        settings_core = CoreFactory.settings_core()
+        settings = settings_core.load()
+        if settings.default_components_mode == "all":
+            return None, ""
+        components = list(settings.custom_components)
+        if not components:
+            return None, "Select at least one component in Settings"
+        return components, ""
+
     @Slot(str)
     def applyProfile(self, profile: str) -> None:
         """Применить профиль (асинхронно)."""
-        # Используем настройки для определения компонентов
-        settings_core = CoreFactory.settings_core()
-        settings = settings_core.load()
-        components = None if settings.default_components_mode == "all" else list(settings.custom_components)
+        try:
+            profile = validate_profile_name(profile)
+        except ValueError as exc:
+            self.operationFinished.emit(False, str(exc))
+            return
+        components, error = self._settings_components()
+        if error:
+            self.operationFinished.emit(False, error)
+            return
 
         def _work() -> tuple[bool, str]:
             result = self._core.apply(profile, components)
@@ -197,9 +214,15 @@ class ProfileController(QObject):
     @Slot(str)
     def saveProfile(self, name: str) -> None:
         """Сохранить текущее состояние как профиль (асинхронно)."""
-        settings_core = CoreFactory.settings_core()
-        settings = settings_core.load()
-        components = None if settings.default_components_mode == "all" else list(settings.custom_components)
+        try:
+            name = validate_profile_name(name)
+        except ValueError as exc:
+            self.operationFinished.emit(False, str(exc))
+            return
+        components, error = self._settings_components()
+        if error:
+            self.operationFinished.emit(False, error)
+            return
 
         def _work() -> tuple[bool, str]:
             result = self._core.save(name, components)
@@ -210,6 +233,12 @@ class ProfileController(QObject):
     @Slot(str)
     def deleteProfile(self, name: str) -> None:
         """Удалить профиль (асинхронно)."""
+        try:
+            name = validate_profile_name(name)
+        except ValueError as exc:
+            self.operationFinished.emit(False, str(exc))
+            return
+
         def _work() -> tuple[bool, str]:
             result = self._core.delete(name)
             return result.success, result.message
@@ -287,6 +316,7 @@ class WallpaperController(QObject):
     def _start_operation(self, name: str, func: Callable[[], tuple[bool, str]]) -> None:
         """Запустить фоновую операцию (не блокирует UI)."""
         if self._busy:
+            self.operationFinished.emit(False, "Another operation is still running")
             return
         self._set_busy(True)
         self.operationStarted.emit(name)
@@ -600,18 +630,6 @@ class SettingsController(QObject):
             )
             self.settingsChanged.emit()
 
-    @Property(str, notify=settingsChanged)
-    def globalHotkey(self) -> str:
-        return self._settings.global_hotkey
-
-    @globalHotkey.setter
-    def globalHotkey(self, value: str) -> None:
-        if self._settings.global_hotkey != value:
-            self._settings = AppSettings(
-                **{**self._settings.to_dict(), "global_hotkey": value}
-            )
-            self.settingsChanged.emit()
-
     @Property(bool, notify=settingsChanged)
     def confirmBeforeApply(self) -> bool:
         return self._settings.confirm_before_apply
@@ -761,6 +779,12 @@ class MainController(QObject):
         self._tracked_apps.refresh()
         self._settings.load()
         self._theme.refresh()
+
+        # Opt-in: re-apply the last active profile after the UI is up.  The
+        # setting existed for a long time but was never read.
+        if self._settings.autoApplyOnStartup and self._profile.activeProfile:
+            profile = self._profile.activeProfile
+            QTimer.singleShot(0, lambda: self._profile.applyProfile(profile))
 
 
 # ──────────────────────────────────────────────────────────────

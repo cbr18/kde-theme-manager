@@ -238,6 +238,25 @@ class TestPythonProfileCore:
         # Just verify the method runs without crashing
         assert isinstance(result.success, bool)
 
+    def test_delete_rejects_path_traversal(self, tmp_path: Path) -> None:
+        core = self._make_core()
+        victim = tmp_path / "victim"
+        victim.mkdir()
+        result = core.delete("../" + victim.name)
+        assert result.success is False
+        assert victim.is_dir()
+
+    def test_apply_rejects_empty_component_list(self) -> None:
+        core = self._make_core()
+        result = core.apply("glass", components=[])
+        assert result.success is False
+        assert "component" in result.message.lower()
+
+    def test_apply_rejects_unknown_component(self) -> None:
+        core = self._make_core()
+        result = core.apply("glass", components=["not-a-real-component"])
+        assert result.success is False
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. PythonSettingsCore — file-based I/O
@@ -279,6 +298,8 @@ class TestPythonSettingsCore:
             assert loaded.theme == "glass"
             assert loaded.default_components_mode == "custom"
             assert loaded.custom_components == ("kwin", "kdeglobals")
+            # Preferences must not be widened to the process umask.
+            assert (tmp_path / "settings.json").stat().st_mode & 0o777 == 0o600
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -833,7 +854,7 @@ def test_selection_is_separate_from_apply() -> None:
         "Clicking a profile must only assign the pending selection"
     )
     # ...and a dedicated Apply button performs the (slow) application.
-    assert "profileController.applyProfile(root.selectedProfile)" in main_qml, (
+    assert "root.requestApply(root.selectedProfile)" in main_qml, (
         "An explicit Apply button must trigger profile application"
     )
 

@@ -19,6 +19,7 @@ pub fn to_c_string(s: String) -> *mut c_char {
 }
 
 /// Helper to free C string (defined in lib.rs)
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn kde_theme_core_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         unsafe {

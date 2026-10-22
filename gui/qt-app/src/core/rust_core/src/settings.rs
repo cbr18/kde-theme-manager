@@ -1,9 +1,13 @@
-/// Settings Core Implementation
+//! Settings Core Implementation
 
+use std::fs::{self, DirBuilder, OpenOptions};
+use std::io::Write;
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
-use std::fs;
+
 use anyhow::Result;
-use dirs;
+
+use crate::paths::settings_file as theme_settings_file;
 
 pub use crate::types::{AppSettings, OperationResult};
 
@@ -33,7 +37,7 @@ impl SettingsCore for DefaultSettingsCore {
 
 /// Settings file path
 fn settings_file() -> PathBuf {
-    dirs::home_dir().unwrap().join(".config/theme-profile/app-preferences.json")
+    theme_settings_file()
 }
 
 /// Load settings
@@ -48,14 +52,31 @@ pub fn load_settings() -> Result<AppSettings> {
     }
 }
 
-/// Save settings
+/// Save settings atomically without widening permissions.
 pub fn save_settings(settings: AppSettings) -> Result<()> {
     let file = settings_file();
     if let Some(parent) = file.parent() {
-        fs::create_dir_all(parent)?;
+        let mut builder = DirBuilder::new();
+        builder.recursive(true).mode(0o700);
+        builder.create(parent)?;
     }
-    let content = serde_json::to_string_pretty(&settings)?;
-    fs::write(&file, content)?;
+
+    let mode = fs::metadata(&file)
+        .map(|m| m.permissions().mode() & 0o777)
+        .unwrap_or(0o600);
+    let content = serde_json::to_string_pretty(&settings)? + "\n";
+    let tmp = file.with_extension("json.ktm-tmp");
+
+    let mut handle = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(mode)
+        .open(&tmp)?;
+    handle.write_all(content.as_bytes())?;
+    handle.sync_all()?;
+    fs::set_permissions(&tmp, fs::Permissions::from_mode(mode))?;
+    fs::rename(&tmp, &file)?;
     Ok(())
 }
 

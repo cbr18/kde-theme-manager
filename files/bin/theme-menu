@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
+
 THEME_PROFILE="${THEME_PROFILE:-$HOME/.local/bin/theme-profile}"
-ROOT="$HOME/.config/theme-profile"
+ROOT="$CONFIG_HOME/theme-profile"
+if [ ! -d "$ROOT" ] && [ -n "${XDG_CONFIG_HOME:-}" ] && [ -d "${HOME}/.config/theme-profile" ]; then
+  ROOT="${HOME}/.config/theme-profile"
+fi
 PROFILES="$ROOT/profiles"
-STYLE="$HOME/.config/wofi/style.css"
+STYLE="$CONFIG_HOME/wofi/style.css"
 
 wofi_menu() {
   local prompt="$1"

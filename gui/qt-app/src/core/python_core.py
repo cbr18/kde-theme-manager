@@ -15,6 +15,16 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote, urlsplit
 
+from .fileutil import atomic_write_text
+from .paths import (
+    active_profile_file,
+    cache_home,
+    live_path,
+    profile_dir,
+    profiles_dir,
+    settings_file,
+    validate_profile_name,
+)
 from .protocol import (
     ProfileCore, WallpaperCore, TrackedAppsCore, SettingsCore,
     ProfileInfo, Result, AppSettings, Component, AppStatus, CoreFactory
@@ -37,8 +47,18 @@ class PythonProfileCore(ProfileCore):
         else:
             fallback = Path.home() / ".local/bin" / theme_profile_bin
             self.bin = str(fallback) if fallback.exists() else theme_profile_bin
-        self._profiles_dir = Path.home() / ".config/theme-profile/profiles"
-        self._active_file = Path.home() / ".config/theme-profile/active-profile"
+        # Cached for compatibility with the existing test-suite; the public
+        # properties keep the rest of the code free of direct attribute use.
+        self._profiles_dir = profiles_dir()
+        self._active_file = active_profile_file()
+
+    @property
+    def profiles_dir(self) -> Path:
+        return self._profiles_dir
+
+    @property
+    def active_file(self) -> Path:
+        return self._active_file
 
     def _run(self, args: list[str], timeout: int = 30) -> Result:
         try:
@@ -69,20 +89,27 @@ class PythonProfileCore(ProfileCore):
 
     def get_active_profile(self) -> str:
         try:
-            return self._active_file.read_text().strip()
+            active = self.active_file.read_text().strip()
         except Exception:
+            return ""
+        try:
+            return validate_profile_name(active)
+        except ValueError:
             return ""
 
     def _get_profile_info(self, name: str, is_active: bool) -> ProfileInfo:
         """Получить метаданные профиля."""
-        profile_dir = self._profiles_dir / name
+        try:
+            directory = profile_dir(name)
+        except ValueError:
+            return ProfileInfo(name=str(name), is_active=False, components=())
         created_at = ""
         description = ""
         components = ()
         wallpaper_path = ""
 
         # Читаем манифест если есть
-        manifest = profile_dir / "manifest.txt"
+        manifest = directory / "manifest.txt"
         if manifest.exists():
             try:
                 content = manifest.read_text()
@@ -98,7 +125,7 @@ class PythonProfileCore(ProfileCore):
         comps = []
         for app_def in TRACKED_APPS:
             for rel_path in app_def.config_paths:
-                if (profile_dir / rel_path).exists():
+                if (directory / rel_path).exists():
                     comps.append(app_def.id)
                     break
 
@@ -111,35 +138,97 @@ class PythonProfileCore(ProfileCore):
             wallpaper_path=wallpaper_path,
         )
 
+    def _component_arg(self, components: Optional[list[str]]) -> Optional[str]:
+        """Validate a custom component selection.
+
+        ``None`` means "all components"; an explicitly empty list is an error.
+        Treating it as "all" was dangerous: deselecting every checkbox in the
+        GUI applied the complete profile instead of nothing.
+        """
+        if components is None:
+            return None
+        if not components:
+            raise ValueError("Select at least one component")
+        allowed = {app.id for app in TRACKED_APPS}
+        cleaned: list[str] = []
+        for component in components:
+            if not isinstance(component, str) or not component:
+                raise ValueError("Invalid component id")
+            if "," in component or "=" in component or "\n" in component:
+                raise ValueError(f"Invalid component id: {component!r}")
+            if component not in allowed:
+                raise ValueError(f"Unknown component: {component}")
+            if component not in cleaned:
+                cleaned.append(component)
+        if not cleaned:
+            raise ValueError("Select at least one component")
+        return ",".join(cleaned)
+
     def apply(self, profile: str, components: Optional[list[str]] = None) -> Result:
+        try:
+            profile = validate_profile_name(profile)
+        except ValueError as exc:
+            return Result.err(str(exc))
+        try:
+            selected = self._component_arg(components)
+        except ValueError as exc:
+            return Result.err(str(exc))
         args = ["apply", profile]
-        if components:
-            args.append(f"--components={','.join(components)}")
+        if selected is not None:
+            args.append(f"--components={selected}")
         return self._run(args, timeout=60)
 
     def save(self, name: str, components: Optional[list[str]] = None) -> Result:
+        try:
+            name = validate_profile_name(name)
+        except ValueError as exc:
+            return Result.err(str(exc))
+        try:
+            selected = self._component_arg(components)
+        except ValueError as exc:
+            return Result.err(str(exc))
         args = ["save", name]
-        if components:
-            args.append(f"--components={','.join(components)}")
+        if selected is not None:
+            args.append(f"--components={selected}")
         return self._run(args, timeout=60)
 
     def delete(self, name: str) -> Result:
         # Нет в bash — делаем вручную
-        profile_dir = self._profiles_dir / name
-        if not profile_dir.exists():
+        try:
+            directory = profile_dir(name)
+        except ValueError as exc:
+            return Result.err(str(exc))
+        if not directory.exists() and not directory.is_symlink():
             return Result.err(f"Profile not found: {name}")
         try:
-            import shutil
-            shutil.rmtree(profile_dir)
+            if directory.is_symlink() or not directory.is_dir():
+                directory.unlink()
+            else:
+                shutil.rmtree(directory)
+            # Do not leave a stale marker pointing at a deleted profile.
+            try:
+                if self.active_file.read_text().strip() == name:
+                    self.active_file.unlink(missing_ok=True)
+            except OSError:
+                pass
             return Result.ok(f"Deleted profile: {name}")
         except Exception as e:
             return Result.err(str(e))
 
     def diff(self, a: str, b: str) -> str:
+        try:
+            a = validate_profile_name(a)
+            b = validate_profile_name(b)
+        except ValueError as exc:
+            return f"Error: {exc}"
         res = self._run(["diff", a, b], timeout=30)
         return res.message if res.success else f"Error: {res.message}"
 
     def get_profile_components(self, profile: str) -> list[str]:
+        try:
+            validate_profile_name(profile)
+        except ValueError:
+            return []
         info = self._get_profile_info(profile, False)
         return list(info.components)
 
@@ -158,7 +247,7 @@ class PythonWallpaperCore(WallpaperCore):
 
     def __init__(self):
         self._wallpaper_dir: Optional[Path] = None
-        self.cache_index = Path.home() / ".cache/wallpaper_index"
+        self.cache_index = cache_home() / "wallpaper_index"
 
     def _resolve_wallpaper_dir(self) -> Path:
         """Resolve wallpaper directory from AppSettings (falls back to default)."""
@@ -177,7 +266,7 @@ class PythonWallpaperCore(WallpaperCore):
 
     # Plasma stores the desktop wallpaper per screen in the appletsrc; it is the
     # authoritative answer to "what is on the desktop right now".
-    PLASMA_CONFIG = Path.home() / ".config/plasma-org.kde.plasma.desktop-appletsrc"
+    PLASMA_CONFIG = live_path(".config/plasma-org.kde.plasma.desktop-appletsrc")
 
     _IMAGE_GROUP_RE = re.compile(
         r"^\[Containments\]\[\d+\]\[Wallpaper\]\[org\.kde\.image\]\[General\]$"
@@ -302,7 +391,7 @@ class PythonWallpaperCore(WallpaperCore):
 # Settings Core
 # ──────────────────────────────────────────────────────────────
 
-SETTINGS_FILE = Path.home() / ".config/theme-profile/app-preferences.json"
+SETTINGS_FILE = settings_file()
 
 
 class PythonSettingsCore(SettingsCore):
@@ -319,8 +408,13 @@ class PythonSettingsCore(SettingsCore):
 
     def save(self, settings: AppSettings) -> Result:
         try:
-            SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-            SETTINGS_FILE.write_text(json.dumps(settings.to_dict(), indent=2))
+            SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            # Preferences can reveal local paths; never widen them to 0644.
+            atomic_write_text(
+                SETTINGS_FILE,
+                json.dumps(settings.to_dict(), indent=2) + "\n",
+                mode=0o600,
+            )
             return Result.ok("Settings saved")
         except Exception as e:
             return Result.err(str(e))

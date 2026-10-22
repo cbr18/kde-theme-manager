@@ -6,8 +6,12 @@ use std::process::Command;
 use anyhow::{Result, anyhow};
 use dirs;
 
-use crate::types::ProfileInfo;
+use crate::paths::{
+    active_file, profile_dir as safe_profile_dir, profiles_dir as theme_profiles_dir,
+    validate_profile_name,
+};
 use crate::tracked_apps::component_config_paths;
+use crate::types::ProfileInfo;
 
 /// Profile Core Trait - defines the interface for profile operations
 pub trait ProfileCore {
@@ -53,23 +57,9 @@ impl ProfileCore for DefaultProfileCore {
     }
 }
 
-/// Profile directory structure
-const PROFILES_DIR: &str = ".config/theme-profile/profiles";
-const ACTIVE_FILE: &str = ".config/theme-profile/active-profile";
-
-/// Get profiles directory
-fn profiles_dir() -> PathBuf {
-    dirs::home_dir().unwrap().join(PROFILES_DIR)
-}
-
-/// Get active profile file
-fn active_file() -> PathBuf {
-    dirs::home_dir().unwrap().join(ACTIVE_FILE)
-}
-
 /// List all profiles
 pub fn list_profiles() -> Result<Vec<ProfileInfo>> {
-    let profiles_dir = profiles_dir();
+    let profiles_dir = theme_profiles_dir();
     if !profiles_dir.exists() {
         return Ok(vec![]);
     }
@@ -82,6 +72,9 @@ pub fn list_profiles() -> Result<Vec<ProfileInfo>> {
         let name = entry.file_name().to_string_lossy().to_string();
         
         if entry.file_type()?.is_dir() {
+            if validate_profile_name(&name).is_err() {
+                continue;
+            }
             let profile_path = entry.path();
             let is_active = name == active;
             let components = get_profile_components(&name)?;
@@ -107,7 +100,12 @@ pub fn get_active_profile() -> Result<String> {
     let active_file = active_file();
     if active_file.exists() {
         let content = fs::read_to_string(&active_file)?;
-        Ok(content.trim().to_string())
+        let name = content.trim();
+        if validate_profile_name(name).is_ok() {
+            Ok(name.to_string())
+        } else {
+            Ok(String::new())
+        }
     } else {
         Ok(String::new())
     }
@@ -120,7 +118,7 @@ pub fn get_active_profile() -> Result<String> {
 /// core uses — joining the bare component id to the profile root would look for
 /// `<profile>/kwin` and find nothing.
 pub fn get_profile_components(profile_name: &str) -> Result<Vec<String>> {
-    let profile_dir = profiles_dir().join(profile_name);
+    let profile_dir = safe_profile_dir(profile_name)?;
     if !profile_dir.exists() {
         return Ok(vec![]);
     }
@@ -143,8 +141,8 @@ fn get_profile_created_at(profile_path: &Path) -> Result<String> {
     if manifest.exists() {
         let content = fs::read_to_string(&manifest)?;
         for line in content.lines() {
-            if line.starts_with("timestamp=") {
-                return Ok(line["timestamp=".len()..].to_string());
+            if let Some(stamp) = line.strip_prefix("timestamp=") {
+                return Ok(stamp.to_string());
             }
             if line.starts_with('[') {
                 break;
@@ -192,17 +190,49 @@ fn run_theme_profile(args: &[&str]) -> Result<String> {
 }
 
 /// Apply a profile (delegates to the `theme-profile` script)
+fn component_arg(components: Option<Vec<String>>) -> Result<Option<String>> {
+    match components {
+        None => Ok(None),
+        Some(comps) => {
+            if comps.is_empty() {
+                return Err(anyhow!("Select at least one component"));
+            }
+            let known = component_config_paths();
+            let mut cleaned: Vec<String> = Vec::new();
+            for component in comps {
+                if component.is_empty()
+                    || component.contains(',')
+                    || component.contains('=')
+                    || component.contains('\n')
+                {
+                    return Err(anyhow!("Invalid component id: {component:?}"));
+                }
+                if !known.iter().any(|(id, _)| id == &component) {
+                    return Err(anyhow!("Unknown component: {component}"));
+                }
+                if !cleaned.contains(&component) {
+                    cleaned.push(component);
+                }
+            }
+            if cleaned.is_empty() {
+                return Err(anyhow!("Select at least one component"));
+            }
+            Ok(Some(format!("--components={}", cleaned.join(","))))
+        }
+    }
+}
+
 pub fn apply_profile(profile_name: &str, components: Option<Vec<String>>) -> Result<()> {
-    let profile_dir = profiles_dir().join(profile_name);
+    validate_profile_name(profile_name)?;
+    let profile_dir = safe_profile_dir(profile_name)?;
     if !profile_dir.exists() {
         return Err(anyhow!("Profile not found: {}", profile_name));
     }
 
-    let component_arg;
+    let component_arg = component_arg(components)?;
     let mut args = vec!["apply", profile_name];
-    if let Some(comps) = components.filter(|c| !c.is_empty()) {
-        component_arg = format!("--components={}", comps.join(","));
-        args.push(&component_arg);
+    if let Some(component_arg) = component_arg.as_deref() {
+        args.push(component_arg);
     }
 
     run_theme_profile(&args).map(|_| ())
@@ -210,27 +240,39 @@ pub fn apply_profile(profile_name: &str, components: Option<Vec<String>>) -> Res
 
 /// Save current state as a profile (delegates to the `theme-profile` script)
 pub fn save_profile(profile_name: &str, components: Option<Vec<String>>) -> Result<()> {
-    let component_arg;
+    validate_profile_name(profile_name)?;
+    let component_arg = component_arg(components)?;
     let mut args = vec!["save", profile_name];
-    if let Some(comps) = components.filter(|c| !c.is_empty()) {
-        component_arg = format!("--components={}", comps.join(","));
-        args.push(&component_arg);
+    if let Some(component_arg) = component_arg.as_deref() {
+        args.push(component_arg);
     }
 
     run_theme_profile(&args).map(|_| ())
 }
 
-/// Delete a profile
+/// Delete a profile and clear the active marker when it pointed at it.
 pub fn delete_profile(profile_name: &str) -> Result<()> {
-    let profile_dir = profiles_dir().join(profile_name);
-    if !profile_dir.exists() {
+    let profile_dir = safe_profile_dir(profile_name)?;
+    if !profile_dir.exists() && !profile_dir.is_symlink() {
         return Err(anyhow!("Profile not found: {}", profile_name));
     }
-    fs::remove_dir_all(profile_dir)?;
+    if profile_dir.is_symlink() || !profile_dir.is_dir() {
+        fs::remove_file(&profile_dir)?;
+    } else {
+        fs::remove_dir_all(&profile_dir)?;
+    }
+    let marker = active_file();
+    if let Ok(active) = fs::read_to_string(&marker) {
+        if active.trim() == profile_name {
+            let _ = fs::remove_file(&marker);
+        }
+    }
     Ok(())
 }
 
 /// Diff two profiles (delegates to the `theme-profile` script)
 pub fn diff_profiles(profile_a: &str, profile_b: &str) -> Result<String> {
+    validate_profile_name(profile_a)?;
+    validate_profile_name(profile_b)?;
     run_theme_profile(&["diff", profile_a, profile_b])
 }

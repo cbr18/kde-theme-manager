@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
+CACHE_HOME="${XDG_CACHE_HOME:-${HOME}/.cache}"
+
 DIR="${WALLPAPER_DIR:-$HOME/Изображения/Wallpaper}"
-STATE="${WALLPAPER_STATE:-$HOME/.cache/wallpaper_index}"
-THUMB_DIR="${WALLPAPER_THUMB_DIR:-$HOME/.cache/wallpaper-picker}"
+STATE="${WALLPAPER_STATE:-$CACHE_HOME/wallpaper_index}"
+THUMB_DIR="${WALLPAPER_THUMB_DIR:-$CACHE_HOME/wallpaper-picker}"
 
 COLUMNS=4
 IMAGE_SIZE=210
@@ -80,7 +83,7 @@ SELECTED_INDEX=$(
             --define image_size="$IMAGE_SIZE" \
             --define content_halign=center \
             --define dmenu-print_line_num=true \
-            --style "$HOME/.config/wofi/wallpaper.css"
+            --style "$CONFIG_HOME/wofi/wallpaper.css"
 )
 
 [ -z "$SELECTED_INDEX" ] && exit 0

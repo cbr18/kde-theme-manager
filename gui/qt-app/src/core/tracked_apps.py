@@ -4,11 +4,11 @@ Tracked Applications Registry — полный список отслеживае
 """
 
 from dataclasses import dataclass
-from pathlib import Path
 import shutil
 import subprocess
 from typing import Optional
 
+from .paths import live_path
 from .protocol import Component, AppStatus, TrackedAppsCore
 
 
@@ -320,9 +320,8 @@ def _check_flatpak(flatpak_id: str) -> bool:
 
 
 def _check_configs_exist(paths: tuple[str, ...]) -> bool:
-    """Проверить наличие хотя бы одного конфига."""
-    home = Path.home()
-    return any((home / p).exists() for p in paths)
+    """Проверить наличие хотя бы одного конфига (с учётом XDG)."""
+    return any(live_path(p).exists() for p in paths)
 
 
 def detect_app_status(app: TrackedAppDef) -> AppStatus:
