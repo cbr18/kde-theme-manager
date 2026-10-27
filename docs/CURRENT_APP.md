@@ -1,24 +1,25 @@
-# Текущее приложение: theme-profile-kit (Bash Version)
+# Текущее приложение: theme-profile-kit (0.4.0)
 
-> **Статус**: Рабочая версия на Bash, деплоится в `~/.local/bin/`
-> **Планируемая замена**: Qt/QML приложение (см. [TZ-QT-APP.md](TZ-QT-APP.md))
+> **Статус**: 0.4.0 — Bash CLI + Qt/QML приложение KDE Theme Manager.
+> **GUI**: устанавливается по умолчанию (см. [gui/qt-app/README.md](../gui/qt-app/README.md)).
 
 ---
 
 ## Обзор
 
-`theme-profile-kit` — набор Bash-скриптов для сохранения и применения профилей оформления KDE Plasma. Позволяет переключаться между темами **glass** (прозрачное стекло с размытием) и **paper** (светлая solid тема) одной командой.
+`theme-profile-kit` — Bash CLI и Qt/QML приложение для сохранения и применения профилей оформления KDE Plasma. Позволяет переключаться между темами **glass** (прозрачное стекло с размытием) и **paper** (светлая solid тема) одной командой.
 
 ---
 
 ## Состав
 
-| Скрипт | Назначение |
-|--------|------------|
+| Компонент | Назначение |
+|-----------|------------|
 | `theme-profile` | CLI: `save`, `apply`, `list`, `diff`, `status` профилей |
 | `theme-menu` | Wofi-меню для управления профилями (apply/save/status/open folder) |
 | `wallpaper-picker` | Выбор обоев через wofi с превью (ImageMagick) |
 | `wallpaper-next` / `wallpaper-prev` | Листание обоев по циклу |
+| `kde-theme-manager` | Qt/QML GUI: профили, обои, трей, Theme Inspector |
 
 ---
 

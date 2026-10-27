@@ -1,7 +1,7 @@
 """
 KDE Theme Profile Manager — Qt/QML Application Entry Point.
 
-v0.2.0 — Native KDE UI with Kirigami, Clean Architecture.
+v0.4.0 — Native KDE UI with Kirigami, Clean Architecture.
 """
 
 import os
@@ -35,7 +35,7 @@ from core.protocol import Result, ProfileInfo, Component, AppStatus, AppSettings
 def _show_help() -> int:
     """Print help to stdout (avoids QWidget/QApplication dependency)."""
     print(
-        """KDE Theme Profile Manager v0.2.0-dev
+        """KDE Theme Profile Manager v0.4.0
 A Qt/QML-based theme profile manager for KDE Plasma.
 
 Usage: kde-theme-manager [options]
@@ -218,7 +218,7 @@ def main() -> int:
 
     # Handle --version
     if "--version" in sys.argv:
-        print("KDE Theme Manager 0.2.0-dev")
+        print("KDE Theme Manager 0.4.0")
         return 0
 
     if "--list-cores" in sys.argv:
@@ -229,7 +229,7 @@ def main() -> int:
 
     # Настройка приложения
     QCoreApplication.setApplicationName("KDE Theme Manager")
-    QCoreApplication.setApplicationVersion("0.2.0-dev")
+    QCoreApplication.setApplicationVersion("0.4.0")
     QCoreApplication.setOrganizationName("cbr")
     QCoreApplication.setOrganizationDomain("github.com/cbr18/kde-theme-manager")
 

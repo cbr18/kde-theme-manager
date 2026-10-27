@@ -1,4 +1,4 @@
-# KDE Theme Manager — Qt/QML Application (v0.2.0)
+# KDE Theme Manager — Qt/QML Application (v0.4.0)
 
 Native KDE Plasma application for managing theme profiles and wallpapers.
 

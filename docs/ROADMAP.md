@@ -1,8 +1,12 @@
 # KDE Theme Manager — Полный план разработки (Roadmap)
 
+> **Версионирование:** актуальная линия — `0.4.0`. Экспериментальные теги
+> `v1.0.0`–`v1.1.2` оставлены в истории, но публично откатаны: они не являются
+> стабильной линией. Новые релизы продолжаются с `v0.4.0`.
+
 ---
 
-## v0.2.x — Qt/QML MVP (текущий этап)
+## v0.4.0 — Qt/QML (текущий этап)
 
 ### ✅ Готово
 - [x] Clean Architecture: `core/protocol.py` (ABC contracts)
@@ -15,7 +19,7 @@
 - [x] Components: ProfileCardDelegate, ProfileRadioButton, ComponentCategoryGroup, ComponentCheckbox
 - [x] Install/Update/Uninstall скрипты для Qt app
 - [x] pyproject.toml, README, .gitignore
-- [x] Git tags: v0.1.0 (bash), v0.2.0-dev (Qt)
+- [x] Git tags: v0.1.0 (bash), v0.2.0-dev, v0.3.0, v0.4.0 (Qt)
 
 ### 🔄 В процессе / Нужно доделать
 
@@ -61,7 +65,7 @@
 
 ---
 
-## v0.3.0 — Polish & Features
+## v0.3.0 — Polish & Features (история)
 
 ### UX Improvements
 - [ ] **Profile Preview**: показывать diff перед apply (модальное окно)
@@ -82,7 +86,7 @@
 
 ---
 
-## v0.4.0 — Rust Core (Performance & Single Binary)
+## v0.5.0 — Rust Core (Performance & Single Binary)
 
 > **Статус: Phase 1–2 сделаны** (выбор ядра флагом, паритет с Python покрыт
 > тестами). Файлы Rust-крейта: `src/core/rust_core/src/{lib,ffi,types,profile,
@@ -225,7 +229,8 @@ plasma-applet/
 |--------|---------|-------|-----------|
 | v0.2.x | Python 3.11+, PySide6, uv | pip/uv | GitHub Releases |
 | v0.3.0 | + KNotification | | |
-| v0.4.0 | Rust 1.75+, Python 3.11+ (transition) | cargo + pip | Single binary |
+| v0.4.0 | Python 3.11+, PySide6, Rust 1.75+ (optional) | uv, cargo | GitHub Releases |
+| v0.5.0 | Rust core as default, single binary | cargo + pip | Single binary |
 | v1.0.0 | C++17, Qt6, KDE Frameworks 6 | CMake, ECM | AUR, Flatpak, KDE Store |
 
 ---
@@ -244,7 +249,7 @@ plasma-applet/
 
 ---
 
-## Приоритеты (MoSCoW для v0.3.0)
+## Приоритеты (MoSCoW для 0.3.x, история)
 
 | Must Have | Should Have | Could Have | Won't (v0.3) |
 |-----------|-------------|------------|--------------|
@@ -305,5 +310,5 @@ cd ~/theme-profile-kit
 
 ---
 
-*Последнее обновление: v0.2.0-dev*
+*Последнее обновление: v0.4.0*
 *Репозиторий: https://github.com/cbr18/kde-theme-manager*
