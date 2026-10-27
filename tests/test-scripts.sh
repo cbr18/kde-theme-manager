@@ -667,9 +667,14 @@ fi
 # --- 13. apply restores LookAndFeelPackage from the profile (not --help) ------
 echo "=== Section 13: apply_live_hooks reads LookAndFeelPackage from the profile ==="
 
-LF_HOME="$TMP_ROOT/lf-home"
-mkdir -p "$LF_HOME/.config/theme-profile" "$LF_HOME/.config"
-cat > "$LF_HOME/.config/kdeglobals" <<'EOF'
+# This section asserts through the real (sandboxed-by-HOME) KConfig CLI tools,
+# which are KDE tooling absent from CI runners — skip there instead of failing.
+if ! command -v kreadconfig6 >/dev/null 2>&1 || ! command -v kwriteconfig6 >/dev/null 2>&1; then
+  echo "  \u23ed  kreadconfig6/kwriteconfig6 not installed (KDE tooling) — skipping"
+else
+  LF_HOME="$TMP_ROOT/lf-home"
+  mkdir -p "$LF_HOME/.config/theme-profile" "$LF_HOME/.config"
+  cat > "$LF_HOME/.config/kdeglobals" <<'EOF'
 [General]
 ColorScheme=Breeze1
 
@@ -677,45 +682,47 @@ ColorScheme=Breeze1
 LookAndFeelPackage=paper
 EOF
 
-MOCK_BIN_LF="$TMP_ROOT/mock-bin-lf"
-mkdir -p "$MOCK_BIN_LF"
-for cmd in systemctl qdbus6 kbuildsycoca6; do
-  cat > "$MOCK_BIN_LF/$cmd" <<'MOCK'
+  MOCK_BIN_LF="$TMP_ROOT/mock-bin-lf"
+  mkdir -p "$MOCK_BIN_LF"
+  for cmd in systemctl qdbus6 kbuildsycoca6; do
+    cat > "$MOCK_BIN_LF/$cmd" <<'MOCK'
 #!/usr/bin/env bash
 exit 0
 MOCK
-  chmod +x "$MOCK_BIN_LF/$cmd"
-done
+    chmod +x "$MOCK_BIN_LF/$cmd"
+  done
 
-if HOME="$LF_HOME" PATH="$MOCK_BIN_LF:$PATH" \
-  "$CLI_DIR/theme-profile" save lf-test >/dev/null 2>&1; then
-  ok "save copies the live kdeglobals into the profile"
-else
-  fail "save lf-test failed"
+  if HOME="$LF_HOME" PATH="$MOCK_BIN_LF:$PATH" \
+    "$CLI_DIR/theme-profile" save lf-test >/dev/null 2>&1; then
+    ok "save copies the live kdeglobals into the profile"
+  else
+    fail "save lf-test failed"
+  fi
+
+  # Change the live value: applying the profile must restore the profile's one.
+  HOME="$LF_HOME" kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage glass
+
+  if HOME="$LF_HOME" PATH="$MOCK_BIN_LF:$PATH" \
+    "$CLI_DIR/theme-profile" apply lf-test >/dev/null 2>&1; then
+    ok "apply lf-test exits 0 with mocked session commands"
+  else
+    fail "apply lf-test failed"
+  fi
+
+  lf_value="$(HOME="$LF_HOME" kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage)"
+  if [ "$lf_value" = "paper" ]; then
+    ok "apply restores LookAndFeelPackage from the profile (paper)"
+  else
+    fail "LookAndFeelPackage after apply is '$lf_value' (expected paper)"
+  fi
+
+  if grep -q "Usage: kreadconfig6" "$LF_HOME/.config/kdeglobals"; then
+    fail "apply wrote kreadconfig6 --help into kdeglobals"
+  else
+    ok "apply does not write command help into kdeglobals"
+  fi
 fi
 
-# Change the live value: applying the profile must restore the profile's one.
-HOME="$LF_HOME" kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage glass
-
-if HOME="$LF_HOME" PATH="$MOCK_BIN_LF:$PATH" \
-  "$CLI_DIR/theme-profile" apply lf-test >/dev/null 2>&1; then
-  ok "apply lf-test exits 0 with mocked session commands"
-else
-  fail "apply lf-test failed"
-fi
-
-lf_value="$(HOME="$LF_HOME" kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage)"
-if [ "$lf_value" = "paper" ]; then
-  ok "apply restores LookAndFeelPackage from the profile (paper)"
-else
-  fail "LookAndFeelPackage after apply is '$lf_value' (expected paper)"
-fi
-
-if grep -q "Usage: kreadconfig6" "$LF_HOME/.config/kdeglobals"; then
-  fail "apply wrote kreadconfig6 --help into kdeglobals"
-else
-  ok "apply does not write command help into kdeglobals"
-fi
 
 
 # --- Summary ------------------------------------------------------------------

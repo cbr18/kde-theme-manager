@@ -11,6 +11,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gui/qt-app/src/core/rust_core
+      - name: Build the Rust CLI
+        run: cargo build --release
+        working-directory: gui/qt-app/src/core/rust_core
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y shellcheck imagemagick
       - name: Syntax check (bash -n)
@@ -20,7 +29,7 @@ jobs:
           done
       - name: Shellcheck
         run: shellcheck scripts/*.sh tests/*.sh
-      - name: Run test suite
+      - name: Run CLI + installer test suite
         run: bash tests/test-scripts.sh
 
   test-python:
@@ -34,6 +43,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gui/qt-app/src/core/rust_core
+      # Build the .so and the CLI so the parity/wallpaper tests run for real
+      # (they skip when the artifacts are missing).
+      - name: Build the Rust core + CLI
+        run: cargo build --release
+        working-directory: gui/qt-app/src/core/rust_core
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -43,7 +63,11 @@ jobs:
       - name: py_compile check
         run: python -m py_compile src/*.py src/core/*.py src/controllers/*.py tests/test_gui.py
       - name: Run tests
-        run: python -m pytest tests/ -v
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          export PATH="$(pwd)/src/core/rust_core/target/release:$PATH"
+          python -m pytest tests/ -v
 
   test-rust:
     runs-on: ubuntu-latest
@@ -56,6 +80,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gui/qt-app/src/core/rust_core
       - name: Unit tests
         run: cargo test
       - name: Clippy
