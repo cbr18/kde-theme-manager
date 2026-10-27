@@ -258,15 +258,18 @@ if [ -e "$LEGACY_APPDIR" ]; then
 fi
 
 # ── Caches ──────────────────────────────────────────────────────────────────
-command -v update-desktop-database >/dev/null 2>&1 &&
+if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "$APPSDIR" 2>/dev/null || true
-command -v gtk-update-icon-cache >/dev/null 2>&1 &&
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
   gtk-update-icon-cache -f -t "$DATADIR/icons/hicolor" >/dev/null 2>&1 || true
+fi
 # KDE caches its service/menu database; without this the entry can take a
 # while (or a re-login) to show up in the application menu.
 for ksycoca in kbuildsycoca6 kbuildsycoca5; do
-  command -v "$ksycoca" >/dev/null 2>&1 &&
+  if command -v "$ksycoca" >/dev/null 2>&1; then
     "$ksycoca" >/dev/null 2>&1 || true
+  fi
 done
 
 say "Done."

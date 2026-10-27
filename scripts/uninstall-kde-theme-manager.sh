@@ -90,9 +90,11 @@ remove_appdir() { # dir label
 remove_appdir "$APPDIR" "application"
 remove_appdir "$LEGACY_APPDIR" "obsolete application copy"
 
-command -v update-desktop-database >/dev/null 2>&1 &&
+if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "$APPSDIR" 2>/dev/null || true
-command -v gtk-update-icon-cache >/dev/null 2>&1 &&
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
   gtk-update-icon-cache -f -t "$DATADIR/icons/hicolor" >/dev/null 2>&1 || true
+fi
 
 say "Done. Данные профилей в ~/.config/theme-profile/ не тронуты."

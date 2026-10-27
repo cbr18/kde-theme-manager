@@ -10,7 +10,7 @@ jobs:
   test-bash:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Rust cache
@@ -22,6 +22,12 @@ jobs:
         working-directory: gui/qt-app/src/core/rust_core
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y shellcheck imagemagick
+      # Ubuntu ships ImageMagick 6 (`convert`); the CLI + tests call `magick` —
+      # provide a compat symlink like ImageMagick 7 does.
+      - name: Provide magick (ImageMagick 6 compat)
+        run: |
+          command -v magick || sudo ln -s "$(command -v convert)" /usr/local/bin/magick
+          magick --version | head -1
       - name: Syntax check (bash -n)
         run: |
           for f in scripts/*.sh tests/*.sh; do
@@ -38,9 +44,9 @@ jobs:
       run:
         working-directory: gui/qt-app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Set up Rust
@@ -55,11 +61,16 @@ jobs:
         run: cargo build --release
         working-directory: gui/qt-app/src/core/rust_core
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
       - name: Install dependencies
         run: uv pip install -e ".[dev]" --python=$(uv python find 3.12)
+      # pytest-qt imports PySide6.QtGui at configure time; headless runners
+      # need the OpenGL/X11 base libraries to import it.
+      - name: Install Qt runtime libraries (headless PySide6)
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1 \
+          libxkbcommon0 libdbus-1-3 libfontconfig1 libx11-6 libxcb1
       - name: py_compile check
         run: python -m py_compile src/*.py src/core/*.py src/controllers/*.py tests/test_gui.py
       - name: Run tests
@@ -75,7 +86,7 @@ jobs:
       run:
         working-directory: gui/qt-app/src/core/rust_core
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
