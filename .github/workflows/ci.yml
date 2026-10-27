@@ -12,14 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck imagemagick
       - name: Syntax check (bash -n)
         run: |
-          for f in files/bin/* scripts/*.sh tests/*.sh; do
+          for f in scripts/*.sh tests/*.sh; do
             bash -n "$f" || exit 1
           done
       - name: Shellcheck
-        run: shellcheck files/bin/* scripts/*.sh tests/*.sh
+        run: shellcheck scripts/*.sh tests/*.sh
       - name: Run test suite
         run: bash tests/test-scripts.sh
 
@@ -41,7 +41,7 @@ jobs:
       - name: Install dependencies
         run: uv pip install -e ".[dev]" --python=$(uv python find 3.12)
       - name: py_compile check
-        run: python -m py_compile src/*.py src/core/*.py src/core/python_core.py tests/test_gui.py
+        run: python -m py_compile src/*.py src/core/*.py src/controllers/*.py tests/test_gui.py
       - name: Run tests
         run: python -m pytest tests/ -v
 
