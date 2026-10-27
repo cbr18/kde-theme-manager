@@ -3,7 +3,7 @@
 //! Profiles keep the historical `.config/...` layout, but the live files they
 //! mirror must follow `XDG_CONFIG_HOME`/`XDG_DATA_HOME`.  `theme_root()` prefers
 //! the XDG location and falls back to `~/.config/theme-profile` only when that
-//! legacy directory already exists, mirroring the bash and Python layers.
+//! legacy directory already exists, mirroring the CLI core and the shell adapter.
 
 use std::path::{Path, PathBuf};
 
@@ -39,6 +39,10 @@ pub fn theme_root() -> PathBuf {
 
 pub fn profiles_dir() -> PathBuf {
     theme_root().join("profiles")
+}
+
+pub fn backups_dir() -> PathBuf {
+    theme_root().join("backups")
 }
 
 pub fn active_file() -> PathBuf {

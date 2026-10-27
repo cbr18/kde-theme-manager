@@ -57,6 +57,36 @@ class _OperationWorker(QRunnable):
         self._signals.finished.emit(bool(success), message)
 
 
+class _StringSignals(QObject):
+    """Signals holder for a background job that returns a single string."""
+
+    done = Signal(str)
+
+
+class _StringWorker(QRunnable):
+    """Run ``func() -> str`` off the GUI thread and emit the result."""
+
+    def __init__(self, func: Callable[[], str], signals: _StringSignals) -> None:
+        super().__init__()
+        self._func = func
+        self._signals = signals
+
+    def run(self) -> None:
+        try:
+            text = str(self._func())
+        except Exception as exc:  # noqa: BLE001 - surface as text
+            text = f"Error: {exc}"
+        self._signals.done.emit(text)
+
+
+def _run_async_str(owner: QObject, func: Callable[[], str], on_done: Callable[[str], None]) -> None:
+    """Start ``func`` on the thread pool, deliver its string via ``on_done``."""
+    signals = _StringSignals(owner)
+    signals.done.connect(on_done)
+    signals.done.connect(signals.deleteLater)
+    QThreadPool.globalInstance().start(_StringWorker(func, signals))
+
+
 def _run_async(
     owner: QObject,
     func: Callable[[], tuple[bool, str]],
@@ -88,6 +118,7 @@ class ProfileController(QObject):
     operationStarted = Signal(str)      # operation name
     operationFinished = Signal(bool, str)  # success, message
     componentsForProfileChanged = Signal(list)  # list of component IDs
+    diffReady = Signal(str, str, str)   # profile_a, profile_b, diff text
     busyChanged = Signal()
 
     def __init__(self, parent: Optional[QObject] = None):
@@ -242,9 +273,25 @@ class ProfileController(QObject):
 
         self._start_operation("delete", _work)
 
+    @Slot(str, str)
+    def requestDiff(self, profile_a: str, profile_b: str) -> None:
+        """Сравнить два профиля в фоне.
+
+        The recursive diff of two config trees can take seconds; computing it
+        on the GUI thread froze the window. The result is emitted on
+        ``diffReady`` (with the requested pair) once the thread pool is done.
+        """
+        def _work() -> str:
+            return self._core.diff(profile_a, profile_b)
+
+        def _emit(text: str) -> None:
+            self.diffReady.emit(profile_a, profile_b, text)
+
+        _run_async_str(self, _work, _emit)
+
     @Slot(str, str, result=str)
     def diffProfiles(self, profile_a: str, profile_b: str) -> str:
-        """Сравнить два профиля."""
+        """Синхронное сравнение (Python-вызовы и тесты; QML использует requestDiff)."""
         return self._core.diff(profile_a, profile_b)
 
     @Slot(str, result=list)

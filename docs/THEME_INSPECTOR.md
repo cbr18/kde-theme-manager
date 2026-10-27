@@ -484,9 +484,15 @@ class ThemeCore(ABC):
    теперь читает значение из профиля без лишнего позиционного аргумента;
    `tests/test-scripts.sh` (section 13) проверяет, что в `kdeglobals` не
    попадает текст usage.
-2. **`status` для zed/vscode/obsidian** отдаёт обрывки JSON (`"mode": "dark",`,
-   `"workbench.colorTheme": …`, `{}`) — парсить нормально.
-3. **`kwin_glass` пуст**, хотя glass-профиль использует `better_blur_dx` — в статусе нет ясности, какой эффект реально включён; брать `loadedEffects` из D-Bus.
+2. **`status` для zed/vscode/obsidian** отдавал обрывки JSON (`"mode": "dark",`,
+   `"workbench.colorTheme": …`, `{}`). ✅ **Исправлено в 0.5.0**: `status` стал
+   нативным Rust-модулем (`rust_core/src/status.rs`) с точными по ключу
+   JSONC/INI-читалками (`config_parser.rs`) — только строковые значения по
+   точным ключам, никаких обрывков; obsidian теперь отдаёт `obsidian_theme` и
+   `obsidian_css_theme` вместо сырого JSON.
+3. **`kwin_glass` пуст** — ключа `glassEnabled` в Plasma 6 нет. ✅ **Исправлено
+   в 0.5.0**: `kwin_glass=true|false` выводится из реального
+   `better_blur_dxEnabled`; рядом остаются `kwin_blur`, `kwin_contrast`.
 4. **Курсорная тема не отслеживается.** Решение: курсор остаётся **live-only**
    (`kcminputrc` не входит в профиль), чтобы не менять состав существующих
    снимков; Theme Inspector показывает и меняет его в live-скопе.

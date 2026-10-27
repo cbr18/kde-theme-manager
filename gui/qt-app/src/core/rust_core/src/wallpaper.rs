@@ -55,7 +55,7 @@ impl WallpaperCore for DefaultWallpaperCore {
 }
 
 /// Get wallpaper directory (override from Python, otherwise the default)
-fn wallpaper_dir() -> PathBuf {
+pub fn wallpaper_dir() -> PathBuf {
     if let Ok(guard) = WALLPAPER_DIR.lock() {
         if let Some(dir) = guard.as_ref() {
             let expanded = expand_tilde(dir);
@@ -96,13 +96,13 @@ fn expand_tilde(path: &str) -> PathBuf {
 }
 
 /// Get cache index file
-fn cache_index() -> PathBuf {
+pub fn cache_index() -> PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join("wallpaper_index")
 }
 
-/// Environment forcing the bash scripts onto our directory
+/// Environment forcing the CLI binaries onto our directory
 fn script_env() -> Vec<(&'static str, String)> {
     vec![("WALLPAPER_DIR", wallpaper_dir().to_string_lossy().to_string())]
 }
@@ -161,11 +161,16 @@ pub fn prev_wallpaper() -> Result<()> {
 ///
 /// Plasma keeps the desktop wallpaper per containment in the appletsrc; it is
 /// the authoritative answer to "what is on the desktop". Mirrors
-/// BashWallpaperCore._plasma_wallpaper(): the *last* `Image=` inside a
+/// CLI core's `_plasma_wallpaper()`: the *last* `Image=` inside a
 /// `[Containments][N][Wallpaper][org.kde.image][General]` group wins.
 fn plasma_wallpaper() -> Option<String> {
-    let config = dirs::config_dir()?
-        .join("plasma-org.kde.plasma.desktop-appletsrc");
+    let config = dirs::config_dir()?.join("plasma-org.kde.plasma.desktop-appletsrc");
+    plasma_wallpaper_from(&config)
+}
+
+/// Same as [`plasma_wallpaper`] but against an explicit appletsrc path
+/// (used by the CLI, which honours `PLASMA_APPLETSRC`).
+pub fn plasma_wallpaper_from(config: &Path) -> Option<String> {
     let text = fs::read_to_string(config).ok()?;
 
     let mut url: Option<String> = None;
@@ -219,7 +224,7 @@ fn percent_decode(input: &str) -> String {
 
 /// Get current wallpaper
 ///
-/// Plasma first (self-healing, like the Bash core), cached index only as a
+/// Plasma first (self-healing, like the CLI core), cached index only as a
 /// fallback: the index is a position in the list and silently points at a
 /// different file once the enumeration order changes.
 pub fn current_wallpaper() -> Result<String> {
@@ -245,13 +250,17 @@ pub fn current_wallpaper() -> Result<String> {
 
 /// List all wallpapers
 ///
-/// The order and the accepted extensions must match the bash scripts
-/// (files/bin/wallpaper-{picker,next,prev}) and the Bash core: the cached
+/// The order and the accepted extensions must match the CLI binaries
+/// (theme-profile/wallpaper-*) and the CLI core: the cached
 /// index is a position in this list. `is_file()` follows symlinks (like
 /// `find -L`), extensions are compared case-insensitively (like
 /// `find -iname`), and `sort()` on String is byte order (like `LC_ALL=C sort`).
 pub fn list_wallpapers() -> Result<Vec<String>> {
-    let dir = wallpaper_dir();
+    list_wallpapers_in(&wallpaper_dir())
+}
+
+/// List wallpapers in an explicit directory (CLI: honours `WALLPAPER_DIR`).
+pub fn list_wallpapers_in(dir: &Path) -> Result<Vec<String>> {
     if !dir.exists() {
         return Ok(vec![]);
     }
@@ -259,7 +268,7 @@ pub fn list_wallpapers() -> Result<Vec<String>> {
     let mut wallpapers = Vec::new();
     let extensions = ["jpg", "jpeg", "png", "webp", "bmp"];
 
-    for entry in fs::read_dir(&dir)? {
+    for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_file() {
@@ -274,6 +283,32 @@ pub fn list_wallpapers() -> Result<Vec<String>> {
 
     wallpapers.sort();
     Ok(wallpapers)
+}
+
+/// Starting index for next/prev: the wallpaper Plasma actually shows, else the
+/// cached index, else 0. Mirrors the historical bash scripts exactly.
+pub fn anchor_index(files: &[String], state: &Path, plasma: Option<&Path>) -> usize {
+    let mut index: Option<usize> = None;
+    if let Some(config) = plasma {
+        if let Some(current) = plasma_wallpaper_from(config) {
+            index = files.iter().position(|f| f == &current);
+        }
+    }
+    if index.is_none() {
+        index = fs::read_to_string(state)
+            .ok()
+            .and_then(|s| s.trim().parse::<usize>().ok());
+    }
+    index.unwrap_or(0)
+}
+
+/// Write the cached index (`mkdir -p` + `echo > state`).
+pub fn write_cache_index(state: &Path, index: usize) -> Result<()> {
+    if let Some(parent) = state.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(state, format!("{index}\n"))?;
+    Ok(())
 }
 
 /// Set wallpaper

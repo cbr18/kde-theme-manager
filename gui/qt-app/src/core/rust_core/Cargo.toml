@@ -1,14 +1,37 @@
 [package]
 name = "kde_theme_core"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
-description = "KDE Theme Profile Manager - Rust Core Library"
+description = "KDE Theme Profile Manager - Rust Core Library + CLI"
 license = "MIT"
 repository = "https://github.com/cbr18/kde-theme-manager"
 
 [lib]
 name = "kde_theme_core"
 crate-type = ["cdylib", "rlib"]
+
+# The command line interface is implemented in this crate so the library and
+# the CLI share one source of truth (registry, mutations, status parsers).
+# files/bin/* (bash) was removed in 0.5.0.
+[[bin]]
+name = "theme-profile"
+path = "src/bin/theme-profile.rs"
+
+[[bin]]
+name = "theme-menu"
+path = "src/bin/theme-menu.rs"
+
+[[bin]]
+name = "wallpaper-picker"
+path = "src/bin/wallpaper-picker.rs"
+
+[[bin]]
+name = "wallpaper-next"
+path = "src/bin/wallpaper-next.rs"
+
+[[bin]]
+name = "wallpaper-prev"
+path = "src/bin/wallpaper-prev.rs"
 
 [dependencies]
 # FFI support

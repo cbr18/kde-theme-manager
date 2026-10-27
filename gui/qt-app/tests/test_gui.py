@@ -4,7 +4,7 @@ Test suite for KDE Theme Manager — QA audit.
 Tests cover:
   1. py_compile validation of all Python source files.
   2. Import checks for modules that don't require a display.
-  3. Mock / unit tests for BashCore classes (Profile, Wallpaper, Settings).
+  3. Mock / unit tests for CLICore classes (Profile, Wallpaper, Settings).
   4. Protocol / dataclass integrity checks.
   5. Tracked-apps registry structural validation.
 """
@@ -82,13 +82,13 @@ def test_import_tracked_apps() -> None:
     detect_all_apps()  # must not raise
 
 
-def test_import_bash_core() -> None:
-    """Bash core implementations must import cleanly."""
-    from core.bash_core import (
-        BashProfileCore,
-        BashSettingsCore,
-        BashTrackedAppsCore,
-        BashWallpaperCore,
+def test_import_cli_core() -> None:
+    """CLI core implementations must import cleanly."""
+    from core.cli_core import (
+        CliProfileCore,
+        CliSettingsCore,
+        CliTrackedAppsCore,
+        CliWallpaperCore,
     )
     from core.protocol import Result
     # Smoke-check Result constructors
@@ -170,15 +170,15 @@ def test_core_factory_reset_and_recreate() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. BashProfileCore — mocked subprocess
+# 5. CliProfileCore — mocked subprocess
 # ─────────────────────────────────────────────────────────────────────────────
-class TestBashProfileCore:
-    """Unit tests for BashProfileCore with mocked subprocess."""
+class TestCliProfileCore:
+    """Unit tests for CliProfileCore with mocked subprocess."""
 
     def _make_core(self) -> "object":
-        from core.bash_core import BashProfileCore
+        from core.cli_core import CliProfileCore
 
-        return BashProfileCore()
+        return CliProfileCore()
 
     def test_list_profiles_empty(self) -> None:
         core = self._make_core()
@@ -259,38 +259,38 @@ class TestBashProfileCore:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. BashSettingsCore — file-based I/O
+# 6. CliSettingsCore — file-based I/O
 # ─────────────────────────────────────────────────────────────────────────────
-class TestBashSettingsCore:
-    """Unit tests for BashSettingsCore with temp directory."""
+class TestCliSettingsCore:
+    """Unit tests for CliSettingsCore with temp directory."""
 
     def test_defaults(self) -> None:
-        from core.bash_core import BashSettingsCore
+        from core.cli_core import CliSettingsCore
 
-        core = BashSettingsCore()
+        core = CliSettingsCore()
         settings = core.get_defaults()
         assert settings.theme == "system"
         assert settings.default_components_mode == "all"
         assert settings.custom_components == ()
 
     def test_load_nonexistent_returns_defaults(self) -> None:
-        from core.bash_core import BashSettingsCore
+        from core.cli_core import CliSettingsCore
 
-        core = BashSettingsCore()
+        core = CliSettingsCore()
         settings = core.load()
         assert settings.theme == "system"
 
     def test_save_and_load_roundtrip(self, tmp_path: Path) -> None:
-        from core.bash_core import BashSettingsCore
+        from core.cli_core import CliSettingsCore
         from core.protocol import AppSettings
 
-        core = BashSettingsCore()
+        core = CliSettingsCore()
         custom = AppSettings(
             theme="glass",
             default_components_mode="custom",
             custom_components=("kwin", "kdeglobals"),
         )
-        with mock.patch("core.bash_core.SETTINGS_FILE", tmp_path / "settings.json"):
+        with mock.patch("core.cli_core.SETTINGS_FILE", tmp_path / "settings.json"):
             result = core.save(custom)
             assert result.success
 
@@ -303,44 +303,44 @@ class TestBashSettingsCore:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7. BashWallpaperCore — wallpaper dir uses settings
+# 7. CliWallpaperCore — wallpaper dir uses settings
 # ─────────────────────────────────────────────────────────────────────────────
-class TestBashWallpaperCore:
+class TestCliWallpaperCore:
     """Test that wallpaper_dir resolves from settings, not hardcoded."""
 
     def test_wallpaper_dir_is_property(self) -> None:
         """wallpaper_dir is now a property, not a hardcoded attribute."""
-        from core.bash_core import BashWallpaperCore
+        from core.cli_core import CliWallpaperCore
 
-        core = BashWallpaperCore()
+        core = CliWallpaperCore()
         # Should be accessible as a property (Path object)
         dir_path = core.wallpaper_dir
         assert isinstance(dir_path, Path)
 
     def test_wallpaper_dir_uses_settings(self) -> None:
         """wallpaper_dir should come from AppSettings.wallpaper_directory."""
-        from core.bash_core import BashWallpaperCore
+        from core.cli_core import CliWallpaperCore
 
-        core = BashWallpaperCore()
+        core = CliWallpaperCore()
         # The property should resolve to the default wallpaper directory
         # (since no settings file exists in CI, it falls back to default)
         assert core.wallpaper_dir is not None
 
     def test_list_wallpapers_nonexistent_dir(self) -> None:
         """list_wallpapers returns [] when dir doesn't exist."""
-        from core.bash_core import BashWallpaperCore
+        from core.cli_core import CliWallpaperCore
 
-        core = BashWallpaperCore()
+        core = CliWallpaperCore()
         with mock.patch.object(type(core), "wallpaper_dir", Path("/nonexistent/dir/12345")):
             assert core.list_wallpapers() == []
 
     def test_resolve_wallpaper_dir_from_settings(self) -> None:
         """_resolve_wallpaper_dir should use CoreFactory settings."""
-        from core.bash_core import BashWallpaperCore
+        from core.cli_core import CliWallpaperCore
 
-        core = BashWallpaperCore()
+        core = CliWallpaperCore()
         core._wallpaper_dir = None  # Reset
-        with mock.patch("core.bash_core.CoreFactory") as mock_factory:
+        with mock.patch("core.cli_core.CoreFactory") as mock_factory:
             mock_settings = mock.Mock()
             mock_settings.wallpaper_directory = "/tmp/test-wallpapers"
             mock_factory.settings_core.return_value.load.return_value = mock_settings
@@ -352,7 +352,7 @@ class TestBashWallpaperCore:
 # 7b. Wallpaper list/order and "current wallpaper" resolution
 #
 # The cached index in ~/.cache/wallpaper_index is a *position* in the list, so
-# the bash scripts and this core must enumerate the same files in the same
+# the cli scripts and this core must enumerate the same files in the same
 # order. A locale-aware `sort` (ru_RU.UTF-8) or a different extension list
 # made the GUI resolve the index to a wallpaper other than the one applied.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -376,12 +376,12 @@ def _make_wallpaper_dir(tmp_path: Path) -> Path:
 
 
 class TestWallpaperOrdering:
-    """Ordering/selection rules that the bash scripts and the GUI must share."""
+    """Ordering/selection rules that the cli scripts and the GUI must share."""
 
     def _core(self, directory: Path):
-        from core.bash_core import BashWallpaperCore
+        from core.cli_core import CliWallpaperCore
 
-        core = BashWallpaperCore()
+        core = CliWallpaperCore()
         core._wallpaper_dir = directory
         return core
 
@@ -396,17 +396,19 @@ class TestWallpaperOrdering:
         assert "Zebra.png" in names and "apple.png" in names
         assert names.index("-dash.jpg") == 0
         assert names.index("Обои.jpg") > names.index("apple.png")
-        assert "Beta.bmp" in names, ".bmp must be listed (bash accepts it)"
+        assert "Beta.bmp" in names, ".bmp must be listed (cli accepts it)"
         assert "UP.PNG" in names, "extensions must match case-insensitively"
         assert "linked.png" in names, "symlinks must be listed (find -L)"
         assert "notes.txt" not in names
         assert len(files) == 8
 
     def test_list_wallpapers_matches_wallpaper_next(self, tmp_path: Path) -> None:
-        """The scripts and the GUI must walk the *same* list in the same order."""
-        script = PROJECT_ROOT.parents[1] / "files" / "bin" / "wallpaper-next"
-        if not script.exists():
-            pytest.skip(f"kit script not found: {script}")
+        """The CLI and the GUI must walk the *same* list in the same order."""
+        script = (
+            SRC_DIR / "core" / "rust_core" / "target" / "release" / "wallpaper-next"
+        )
+        if not script.is_file():
+            pytest.skip("the Rust CLI is not built (cargo build --release)")
 
         d = _make_wallpaper_dir(tmp_path)
         files = [Path(f).name for f in self._core(d).list_wallpapers()]
@@ -424,7 +426,7 @@ class TestWallpaperOrdering:
         walked = []
         for _ in range(len(files)):
             proc = subprocess.run(
-                ["bash", str(script)], capture_output=True, text=True, env=env
+                [str(script)], capture_output=True, text=True, env=env
             )
             assert proc.returncode == 0, proc.stderr
             walked.append(Path(proc.stdout.strip()).name)
@@ -433,7 +435,7 @@ class TestWallpaperOrdering:
 
     def test_current_reads_plasma_config(self, tmp_path: Path, monkeypatch) -> None:
         """current() must report the wallpaper Plasma actually shows."""
-        from core.bash_core import BashWallpaperCore
+        from core.cli_core import CliWallpaperCore
 
         d = _make_wallpaper_dir(tmp_path)
         real = d / "Zebra.png"
@@ -446,7 +448,7 @@ class TestWallpaperOrdering:
             "[Containments][282][Wallpaper][org.kde.slideshow][General]\n"
             "Image=file:///elsewhere/slide.png\n"
         )
-        monkeypatch.setattr(BashWallpaperCore, "PLASMA_CONFIG", config)
+        monkeypatch.setattr(CliWallpaperCore, "PLASMA_CONFIG", config)
 
         core = self._core(d)
         core.cache_index = tmp_path / "state"
@@ -455,14 +457,14 @@ class TestWallpaperOrdering:
         assert core.current() == str(real)
 
     def test_current_decodes_url_escapes(self, tmp_path: Path, monkeypatch) -> None:
-        from core.bash_core import BashWallpaperCore
+        from core.cli_core import CliWallpaperCore
 
         config = tmp_path / "appletsrc"
         config.write_text(
             "[Containments][281][Wallpaper][org.kde.image][General]\n"
             "Image=file:///home/u/My%20Pictures/wall%20one.png\n"
         )
-        monkeypatch.setattr(BashWallpaperCore, "PLASMA_CONFIG", config)
+        monkeypatch.setattr(CliWallpaperCore, "PLASMA_CONFIG", config)
 
         core = self._core(tmp_path)
         assert core.current() == "/home/u/My Pictures/wall one.png"
@@ -470,11 +472,11 @@ class TestWallpaperOrdering:
     def test_current_falls_back_to_cached_index(
         self, tmp_path: Path, monkeypatch
     ) -> None:
-        from core.bash_core import BashWallpaperCore
+        from core.cli_core import CliWallpaperCore
 
         d = _make_wallpaper_dir(tmp_path)
         monkeypatch.setattr(
-            BashWallpaperCore, "PLASMA_CONFIG", tmp_path / "missing-appletsrc"
+            CliWallpaperCore, "PLASMA_CONFIG", tmp_path / "missing-appletsrc"
         )
 
         core = self._core(d)
@@ -509,9 +511,9 @@ def test_tracked_apps_have_required_fields() -> None:
 
 def test_tracked_apps_categories() -> None:
     """Categories should include expected KDE/Plasma categories."""
-    from core.tracked_apps import BashTrackedAppsCore
+    from core.tracked_apps import CliTrackedAppsCore
 
-    core = BashTrackedAppsCore()
+    core = CliTrackedAppsCore()
     categories = core.get_categories()
     expected = {"KDE / Plasma", "GTK / Qt", "Window Decorations", "Terminals",
                 "Editors", "Browser"}
@@ -678,15 +680,17 @@ def test_resources_icons_not_empty() -> None:
 # 15. theme-profile --components support
 # ─────────────────────────────────────────────────────────────────────────────
 def test_theme_profile_has_components_support() -> None:
-    """bash theme-profile must support --components= flag (required by GUI)."""
-    theme_profile = Path(__file__).resolve().parents[3] / "files" / "bin" / "theme-profile"
-    if not theme_profile.exists():
-        pytest.skip("theme-profile not found at expected path")
-    content = theme_profile.read_text()
-    assert "COMPONENT_PATHS" in content, "theme-profile must define COMPONENT_PATHS"
-    assert "parse_components_arg" in content, "theme-profile must have parse_components_arg"
-    assert "build_tracked_paths" in content, "theme-profile must have build_tracked_paths"
-    assert "--components" in content, "theme-profile must support --components flag"
+    """Rust CLI must support --components= flag (required by GUI)."""
+    theme_profile = (
+        SRC_DIR / "core" / "rust_core" / "target" / "release" / "theme-profile"
+    )
+    if not theme_profile.is_file():
+        pytest.skip("theme-profile binary not found (cargo build --release)")
+    result = subprocess.run(
+        [str(theme_profile), "--help"], capture_output=True, text=True
+    )
+    assert result.returncode == 0
+    assert "--components" in result.stdout, "theme-profile --help must mention --components"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -882,17 +886,17 @@ def test_theme_controller_applies_palette() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 23. Bash core uses shutil.which for binary path resolution
+# 23. CLI core uses shutil.which for binary path resolution
 # ─────────────────────────────────────────────────────────────────────────────
-def test_bash_core_binary_resolution() -> None:
-    """bash_core.py must use shutil.which with ~/.local/bin fallback for theme-profile."""
-    core_path = SRC_DIR / "core" / "bash_core.py"
+def test_cli_core_binary_resolution() -> None:
+    """cli_core.py must use shutil.which with ~/.local/bin fallback for theme-profile."""
+    core_path = SRC_DIR / "core" / "cli_core.py"
     content = core_path.read_text()
     assert "import shutil" in content, (
-        "bash_core.py must import shutil for PATH resolution"
+        "cli_core.py must import shutil for PATH resolution"
     )
     assert shutil_path_in_init(content), (
-        "BashProfileCore.__init__ must use shutil.which with ~/.local/bin fallback"
+        "CliProfileCore.__init__ must use shutil.which with ~/.local/bin fallback"
     )
 
 
@@ -1371,7 +1375,7 @@ def test_icon_name_survives_kde_icon_loader() -> None:
 # The Rust core is an optional drop-in: a shared library behind a C ABI of
 # `*mut c_char` JSON payloads (freed with kde_theme_core_free_string) and
 # c_int status codes. Without the library everything must degrade to the
-# Bash core instead of crashing.
+# CLI core instead of crashing.
 # ─────────────────────────────────────────────────────────────────────────────
 RUST_LIB = (
     PROJECT_ROOT / "src" / "core" / "rust_core" / "target" / "release"
@@ -1384,14 +1388,14 @@ needs_rust_lib = pytest.mark.skipif(
 
 @pytest.fixture
 def core_factory():
-    """Keep CoreFactory on the Bash backend around a test."""
+    """Keep CoreFactory on the CLI backend around a test."""
     from core.protocol import CoreFactory
 
-    CoreFactory.set_backend("bash")
+    CoreFactory.set_backend("cli")
     try:
         yield CoreFactory
     finally:
-        CoreFactory.set_backend("bash")
+        CoreFactory.set_backend("cli")
 
 
 def test_rust_core_library_candidates_cover_both_layouts(monkeypatch) -> None:
@@ -1498,11 +1502,11 @@ def test_rust_core_status_calls_map_errors_to_result(core_factory) -> None:
 class TestCoreParity:
     @staticmethod
     def cores():
-        from core.bash_core import (
-            BashProfileCore,
-            BashSettingsCore,
-            BashTrackedAppsCore,
-            BashWallpaperCore,
+        from core.cli_core import (
+            CliProfileCore,
+            CliSettingsCore,
+            CliTrackedAppsCore,
+            CliWallpaperCore,
         )
         from core.rust_core import (
             RustProfileCore,
@@ -1512,10 +1516,10 @@ class TestCoreParity:
         )
 
         return (
-            (BashProfileCore(), RustProfileCore()),
-            (BashWallpaperCore(), RustWallpaperCore()),
-            (BashTrackedAppsCore(), RustTrackedAppsCore()),
-            (BashSettingsCore(), RustSettingsCore()),
+            (CliProfileCore(), RustProfileCore()),
+            (CliWallpaperCore(), RustWallpaperCore()),
+            (CliTrackedAppsCore(), RustTrackedAppsCore()),
+            (CliSettingsCore(), RustSettingsCore()),
         )
 
     def test_profiles(self, core_factory) -> None:
@@ -1581,11 +1585,11 @@ class TestCoreParity:
 
         core_factory.set_settings_core(FakeSettings())
 
-        from core.bash_core import BashWallpaperCore
+        from core.cli_core import CliWallpaperCore
         from core.rust_core import RustWallpaperCore
 
         rust_listed = RustWallpaperCore().list_wallpapers()
-        assert rust_listed == BashWallpaperCore().list_wallpapers()
+        assert rust_listed == CliWallpaperCore().list_wallpapers()
         assert [Path(p).name for p in rust_listed] == ["0-link.webp", "B.PNG", "a.jpg"]
 
     def test_tracked_apps(self, core_factory) -> None:
@@ -1629,19 +1633,25 @@ class TestCoreParity:
         assert loaded.core_backend == "rust"
         assert loaded.theme == "paper"
         assert loaded.to_dict() == saved.to_dict()
-        # …and the file must stay readable by the Bash core.
+        # …and the file must stay readable by the CLI core.
         assert AppSettings.from_dict(json.loads(written.read_text())).to_dict() == saved.to_dict()
 
     def test_mutating_profile_operations_go_through_the_script(self, core_factory) -> None:
-        """The Rust core must delegate apply/save to `theme-profile`.
+        """apply/save must be native Rust — no delegation to a shell script.
 
-        A native implementation copied profile entries to `~/<component>`
-        (`kwinrc` → `~/kwin`) and restarted plasmashell on every apply.
+        The historical bash-owned implementation copied profile entries to
+        `~/<component>` (`kwinrc` → `~/kwin`) and restarted plasmashell on
+        every apply; 0.5.0 moved the mutations into `profile.rs`.
         """
         rust_source = (SRC_DIR / "core" / "rust_core" / "src" / "profile.rs").read_text()
 
-        assert "run_theme_profile(&args)" in rust_source
-        assert 'run_theme_profile(&["diff"' in rust_source
+        assert "run_theme_profile" not in rust_source, (
+            "apply/save must not shell out to a theme-profile script"
+        )
+        assert "apply_with_paths" in rust_source
+        assert "save_with_paths" in rust_source
+        assert "copy_tracked_into" in rust_source
+        assert "apply_live_hooks" in rust_source
         assert "restart_plasma_shell" not in rust_source
 
 
@@ -1658,9 +1668,9 @@ def test_core_factory_auto_prefers_rust_when_built(core_factory, monkeypatch) ->
     assert core_factory.set_backend("auto") == "rust"
 
 
-def test_core_factory_auto_falls_back_to_bash(core_factory, monkeypatch) -> None:
+def test_core_factory_auto_falls_back_to_cli(core_factory, monkeypatch) -> None:
     monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: False))
-    assert core_factory.set_backend("auto") == "bash"
+    assert core_factory.set_backend("auto") == "cli"
 
 
 def test_core_factory_strict_rust_failure_is_loud(core_factory, monkeypatch) -> None:
@@ -1674,23 +1684,23 @@ def test_core_factory_strict_rust_failure_is_loud(core_factory, monkeypatch) -> 
 def test_core_factory_soft_fallback_warns(core_factory, monkeypatch, capsys) -> None:
     monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: False))
 
-    assert core_factory.set_backend("rust", strict=False) == "bash"
+    assert core_factory.set_backend("rust", strict=False) == "cli"
     err = capsys.readouterr().err
     assert "falling back" in err
-    assert "Bash core" in err
+    assert "CLI core" in err
 
 
 def test_core_factory_accepts_legacy_python_alias(core_factory) -> None:
-    assert core_factory.set_backend("python") == "bash"
-    assert core_factory.backend_label() == "Bash"
+    assert core_factory.set_backend("python") == "cli"
+    assert core_factory.backend_label() == "CLI"
 
 
 def test_core_factory_reads_the_environment(core_factory, monkeypatch) -> None:
-    monkeypatch.setenv(core_factory.ENV_VAR, "bash")
-    assert core_factory.set_backend_from_env() == "bash"
+    monkeypatch.setenv(core_factory.ENV_VAR, "cli")
+    assert core_factory.set_backend_from_env() == "cli"
 
     monkeypatch.delenv(core_factory.ENV_VAR)
-    assert core_factory.set_backend_from_env(default="bash") == "bash"
+    assert core_factory.set_backend_from_env(default="cli") == "cli"
 
 
 @needs_rust_lib
@@ -1704,12 +1714,12 @@ def test_core_factory_builds_rust_implementations(core_factory) -> None:
     assert isinstance(core_factory.settings_core(), rust_core.RustSettingsCore)
     assert "libkde_theme_core.so" in core_factory.backend_label()
 
-    # Switching back must rebuild the Bash implementations.
-    assert core_factory.set_backend("bash") == "bash"
-    from core.bash_core import BashProfileCore
+    # Switching back must rebuild the CLI implementations.
+    assert core_factory.set_backend("cli") == "cli"
+    from core.cli_core import CliProfileCore
 
-    assert isinstance(core_factory.profile_core(), BashProfileCore)
-    assert core_factory.backend_label() == "Bash"
+    assert isinstance(core_factory.profile_core(), CliProfileCore)
+    assert core_factory.backend_label() == "CLI"
 
 
 def test_settings_expose_the_core_selector() -> None:
@@ -1723,14 +1733,14 @@ def test_settings_expose_the_core_selector() -> None:
 
     qml = (PROJECT_ROOT / "qml" / "pages" / "SettingsPage.qml").read_text()
     assert 'settingsController.coreBackend' in qml
-    assert 'model: ["rust", "bash", "auto"]' in qml
+    assert 'model: ["rust", "cli", "auto"]' in qml
 
     defaults = AppSettings()
     assert defaults.core_backend == "rust"
     assert AppSettings.from_dict({}).core_backend == "rust"
     assert AppSettings.from_dict({"core_backend": "rust"}).core_backend == "rust"
-    assert AppSettings.from_dict({"core_backend": "bash"}).core_backend == "bash"
-    assert AppSettings.from_dict({"core_backend": "python"}).core_backend == "bash"
+    assert AppSettings.from_dict({"core_backend": "cli"}).core_backend == "cli"
+    assert AppSettings.from_dict({"core_backend": "python"}).core_backend == "cli"
     assert defaults.to_dict()["core_backend"] == "rust"
 
 
@@ -1753,7 +1763,7 @@ def _load_main_module():
         (["--core=rust"], "rust", []),
         (["--core", "rust"], "rust", []),
         (["--core=auto", "--verbose"], "auto", ["--verbose"]),
-        (["--core", "bash", "file.qml"], "bash", ["file.qml"]),
+        (["--core", "cli", "file.qml"], "cli", ["file.qml"]),
         (["--core", "python", "file.qml"], "python", ["file.qml"]),
         ([], None, []),
     ],
@@ -1791,7 +1801,7 @@ def test_stale_saved_core_falls_back_instead_of_failing(core_factory, monkeypatc
     from core.protocol import AppSettings
 
     main_module = _load_main_module()
-    import core.bash_core as bash_core
+    import core.cli_core as cli_core
 
     monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: False))
     monkeypatch.delenv(core_factory.ENV_VAR, raising=False)
@@ -1808,11 +1818,11 @@ def test_stale_saved_core_falls_back_instead_of_failing(core_factory, monkeypatc
 
             return Result.ok()
 
-    monkeypatch.setattr(bash_core, "BashSettingsCore", FakeSettingsCore)
+    monkeypatch.setattr(cli_core, "CliSettingsCore", FakeSettingsCore)
 
     main_module._select_core(None)
 
-    assert core_factory.backend() == "bash"
+    assert core_factory.backend() == "cli"
     assert "falling back" in capsys.readouterr().err
     assert saved == [], "a fallback must not overwrite the saved preference"
 
@@ -1821,14 +1831,14 @@ def test_explicit_core_is_persisted(core_factory, monkeypatch) -> None:
     from core.protocol import AppSettings
 
     main_module = _load_main_module()
-    import core.bash_core as bash_core
+    import core.cli_core as cli_core
 
     monkeypatch.delenv(core_factory.ENV_VAR, raising=False)
     saved: list[AppSettings] = []
 
     class FakeSettingsCore:
         def load(self):
-            # Saved as "rust"; the flag asks for bash → the preference flips.
+            # Saved as "rust"; the flag asks for cli → the preference flips.
             return AppSettings(**{**AppSettings().to_dict(), "core_backend": "rust"})
 
         def save(self, settings):
@@ -1837,11 +1847,11 @@ def test_explicit_core_is_persisted(core_factory, monkeypatch) -> None:
 
             return Result.ok()
 
-    monkeypatch.setattr(bash_core, "BashSettingsCore", FakeSettingsCore)
+    monkeypatch.setattr(cli_core, "CliSettingsCore", FakeSettingsCore)
 
-    main_module._select_core("bash")
+    main_module._select_core("cli")
 
-    assert [s.core_backend for s in saved] == ["bash"]
+    assert [s.core_backend for s in saved] == ["cli"]
 
 
 def test_list_cores_reports_availability(capsys) -> None:
@@ -1849,7 +1859,7 @@ def test_list_cores_reports_availability(capsys) -> None:
     assert main_module._list_cores() == 0
 
     out = capsys.readouterr().out
-    assert "bash" in out and "rust" in out
+    assert "cli" in out and "rust" in out
     assert ("available" in out) or ("NOT AVAILABLE" in out)
 
 

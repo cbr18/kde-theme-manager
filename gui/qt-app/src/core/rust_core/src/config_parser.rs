@@ -132,3 +132,159 @@ pub fn get_toml_value(value: &toml::Value, key: &str) -> Option<String> {
 pub fn get_json_value(value: &serde_json::Value, key: &str) -> Option<String> {
     value.get(key).and_then(|v| v.as_str().map(|s| s.to_string()))
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tolerant single-value readers used by `theme-profile status`.
+//
+// These deliberately do NOT parse the whole file: KConfig files may contain
+// unquoted values and JSONC files may contain comments and trailing commas.
+// Each reader only looks for the exact key in the exact position, which is
+// what makes `status` fast (single pass, no full reserialisation) and immune
+// to the "fragments of JSON in the status output" bug.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Read `key=value` from the first line starting with `prefix` (`theme=`,
+/// `gtk-theme-name=`, `background_opacity `, …).
+pub fn line_key_value(path: &Path, prefix: &str) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    for line in content.lines() {
+        if let Some(rest) = line.strip_prefix(prefix) {
+            let value = rest.trim_end().trim();
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+/// Read the (last) value of `key` inside `[group]` of an INI/KConfig file.
+pub fn ini_group_key(path: &Path, group: &str, key: &str) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    let want = format!("[{group}]");
+    let mut in_group = false;
+    let mut value: Option<String> = None;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_group = trimmed == want;
+            continue;
+        }
+        if in_group {
+            if let Some((k, v)) = trimmed.split_once('=') {
+                if k.trim() == key {
+                    value = Some(v.trim().to_string());
+                }
+            }
+        }
+    }
+    value
+}
+
+/// Lines inside `[group]` (diagnostic extraction, matching `write_ini_group`).
+pub fn ini_group_lines(path: &Path, group: &str) -> Vec<String> {
+    let content = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let want = format!("[{group}]");
+    let mut in_group = false;
+    let mut out = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_group = trimmed == want;
+            continue;
+        }
+        if in_group {
+            out.push(trimmed.to_string());
+        }
+    }
+    out
+}
+
+/// `user_pref("key", value);` — value returned unquoted.
+pub fn user_js_pref(path: &Path, key: &str) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    let needle = format!("user_pref(\"{key}\",");
+    for line in content.lines() {
+        let line = line.trim_start();
+        if line.starts_with(&needle) {
+            let rest = &line[needle.len()..];
+            let mut value = rest.trim().to_string();
+            if let Some(idx) = value.rfind(')') {
+                value.truncate(idx);
+                value = value.trim().to_string();
+            }
+            if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+                value = value[1..value.len() - 1].to_string();
+            }
+            return Some(value);
+        }
+    }
+    None
+}
+
+/// Top-level `"key": "value"` in a (JSONC) file. The key must start the line
+/// (after optional whitespace and an opening `{` for one-line objects) — this
+/// is what stops `status` from echoing JSON fragments.
+pub fn json_key_value(path: &Path, key: &str) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    let key_prefix = format!("\"{key}\"");
+    for line in content.lines() {
+        let mut rest = line.trim_start();
+        if let Some(stripped) = rest.strip_prefix('{') {
+            rest = stripped.trim_start();
+        }
+        let Some(tail) = rest.strip_prefix(&key_prefix) else {
+            continue;
+        };
+        let tail = tail.trim_start();
+        let Some(after) = tail.strip_prefix(':') else {
+            continue;
+        };
+        let value = after.trim_start();
+        let Some(inner) = value.strip_prefix('"') else {
+            continue;
+        };
+        if let Some(end) = inner.find('"') {
+            return Some(inner[..end].to_string());
+        }
+    }
+    None
+}
+
+/// `"member": "value"` inside the first `"object": {` block of a JSONC file.
+/// Tolerates comments and trailing commas by only matching quoted keys.
+pub fn json_nested_value(path: &Path, object: &str, member: &str) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    let object_key = format!("\"{object}\"");
+    let member_key = format!("\"{member}\"");
+    let mut in_object = false;
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if !in_object {
+            if let Some(rest) = trimmed.strip_prefix(&object_key) {
+                in_object = rest.trim_start().starts_with(':');
+            }
+            continue;
+        }
+        if trimmed.starts_with('}') {
+            return None;
+        }
+        let trimmed = trimmed.trim_start();
+        let Some(rest) = trimmed.strip_prefix(&member_key) else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some(after) = rest.strip_prefix(':') else {
+            continue;
+        };
+        let value = after.trim_start();
+        let Some(inner) = value.strip_prefix('"') else {
+            continue;
+        };
+        if let Some(end) = inner.find('"') {
+            return Some(inner[..end].to_string());
+        }
+    }
+    None
+}

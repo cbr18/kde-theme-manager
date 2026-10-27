@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# test-scripts.sh — basic test suite for theme-profile-kit
+# test-scripts.sh — test suite for theme-profile-kit (Rust CLI + installers)
 # Run: bash tests/test-scripts.sh
-# Requires: bash, shellcheck (optional but recommended)
+# Requires: the Rust CLI built (cargo build --release in gui/qt-app/src/core/rust_core)
+#           bash, shellcheck (optional but recommended)
 
 set -euo pipefail
 
@@ -15,6 +16,10 @@ FAIL=0
 # --- test helpers -----------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CLI_DIR="${KTM_CLI_DIR:-$SCRIPT_DIR/gui/qt-app/src/core/rust_core/target/release}"
+# The kit installer builds the CLI with cargo; a fake HOME must not reset the
+# crate cache, so the real cargo home is passed through by the tests below.
+REAL_CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 
 ok()   { PASS=$((PASS + 1)); echo "  ✅ $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  ❌ $1"; }
@@ -22,15 +27,21 @@ fail() { FAIL=$((FAIL + 1)); echo "  ❌ $1"; }
 # Silence all output from a command
 run_silent() { "$@" >/dev/null 2>&1; }
 
-# --- 1. Syntax check (bash -n) on all scripts ---------------------------------
+# --- 0. Precondition: the Rust CLI is built ----------------------------------
+echo "=== Section 0: Rust CLI binaries are built ==="
+
+for cli_bin in theme-profile theme-menu wallpaper-picker wallpaper-next wallpaper-prev; do
+  if [ -x "$CLI_DIR/$cli_bin" ]; then
+    ok "built: $cli_bin"
+  else
+    fail "missing: $CLI_DIR/$cli_bin — run 'cargo build --release' in gui/qt-app/src/core/rust_core first"
+  fi
+done
+
+# --- 1. Syntax check (bash -n) on installer scripts ---------------------------
 echo "=== Section 1: Syntax check (bash -n) ==="
 
 for script in \
-    "$SCRIPT_DIR/files/bin/theme-profile" \
-    "$SCRIPT_DIR/files/bin/theme-menu" \
-    "$SCRIPT_DIR/files/bin/wallpaper-picker" \
-    "$SCRIPT_DIR/files/bin/wallpaper-next" \
-    "$SCRIPT_DIR/files/bin/wallpaper-prev" \
     "$SCRIPT_DIR/scripts/install-theme-profile-kit.sh" \
     "$SCRIPT_DIR/scripts/uninstall-theme-profile-kit.sh" \
     "$SCRIPT_DIR/scripts/update-theme-profile-kit.sh" \
@@ -49,11 +60,6 @@ echo "=== Section 2: shellcheck (if installed) ==="
 
 if command -v shellcheck >/dev/null 2>&1; then
   for script in \
-      "$SCRIPT_DIR/files/bin/theme-profile" \
-      "$SCRIPT_DIR/files/bin/theme-menu" \
-      "$SCRIPT_DIR/files/bin/wallpaper-picker" \
-      "$SCRIPT_DIR/files/bin/wallpaper-next" \
-      "$SCRIPT_DIR/files/bin/wallpaper-prev" \
       "$SCRIPT_DIR/scripts/install-theme-profile-kit.sh" \
       "$SCRIPT_DIR/scripts/uninstall-theme-profile-kit.sh" \
       "$SCRIPT_DIR/scripts/update-theme-profile-kit.sh" \
@@ -73,13 +79,13 @@ fi
 # --- 3. theme-profile: --help exits 0 -----------------------------------------
 echo "=== Section 3: --help flags ==="
 
-if "$SCRIPT_DIR/files/bin/theme-profile" --help >/dev/null 2>&1; then
+if "$CLI_DIR/theme-profile" --help >/dev/null 2>&1; then
   ok "theme-profile --help exits 0"
 else
   fail "theme-profile --help should exit 0"
 fi
 
-if "$SCRIPT_DIR/files/bin/theme-profile" -h >/dev/null 2>&1; then
+if "$CLI_DIR/theme-profile" -h >/dev/null 2>&1; then
   ok "theme-profile -h exits 0"
 else
   fail "theme-profile -h should exit 0"
@@ -114,7 +120,7 @@ mkdir -p "$FAKE_HOME/.config/theme-profile"
 
 # Create a real profile so we can test apply success and save
 mkdir -p "$FAKE_HOME/.config/theme-profile/profiles/test-profile"
-if HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" save test-profile >/dev/null 2>&1; then
+if HOME="$FAKE_HOME" "$CLI_DIR/theme-profile" save test-profile >/dev/null 2>&1; then
   ok "save test-profile (valid name)"
 else
   fail "save test-profile (valid name) — should succeed"
@@ -122,7 +128,7 @@ fi
 
 # Test invalid names → should exit non-zero
 for bad_name in "../x" "a b" "a/b" "a;b" "a|b" "a\$b" ""; do
-  if HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" save "$bad_name" >/dev/null 2>&1; then
+  if HOME="$FAKE_HOME" "$CLI_DIR/theme-profile" save "$bad_name" >/dev/null 2>&1; then
     fail "save '$bad_name' should have been rejected"
   else
     ok "save '$bad_name' correctly rejected"
@@ -134,31 +140,31 @@ done
 mkdir -p "$FAKE_HOME/.config"
 printf '[General]\nAccentColor=1,2,3\n' > "$FAKE_HOME/.config/kdeglobals"
 printf '[General]\nBorderSize=1\n' > "$FAKE_HOME/.config/kwinrc"
-HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" save components-test   --components=kwin,kdeglobals >/dev/null 2>&1
+HOME="$FAKE_HOME" "$CLI_DIR/theme-profile" save components-test   --components=kwin,kdeglobals >/dev/null 2>&1
 profile_root="$FAKE_HOME/.config/theme-profile/profiles/components-test"
 if [ -f "$profile_root/.config/kwinrc" ] && [ -f "$profile_root/.config/kdeglobals" ]; then
   ok "save with an explicit component set copies those files"
 else
   fail "save with an explicit component set is missing files"
 fi
-HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" save components-test   --components=kdeglobals >/dev/null 2>&1
+HOME="$FAKE_HOME" "$CLI_DIR/theme-profile" save components-test   --components=kdeglobals >/dev/null 2>&1
 if [ ! -e "$profile_root/.config/kwinrc" ] && [ -f "$profile_root/.config/kdeglobals" ]; then
   ok "re-saving a profile removes stale component files"
 else
   fail "re-saving a profile kept stale component files"
 fi
 
-if HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" apply ../x >/dev/null 2>&1; then
+if HOME="$FAKE_HOME" "$CLI_DIR/theme-profile" apply ../x >/dev/null 2>&1; then
   fail "apply '../x' should have been rejected"
 else
   ok "apply '../x' correctly rejected"
 fi
-if HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" diff test-profile ../x >/dev/null 2>&1; then
+if HOME="$FAKE_HOME" "$CLI_DIR/theme-profile" diff test-profile ../x >/dev/null 2>&1; then
   fail "diff '../x' should have been rejected"
 else
   ok "diff '../x' correctly rejected"
 fi
-if HOME="$FAKE_HOME" "$SCRIPT_DIR/files/bin/theme-profile" apply components-test --components= >/dev/null 2>&1; then
+if HOME="$FAKE_HOME" "$CLI_DIR/theme-profile" apply components-test --components= >/dev/null 2>&1; then
   fail "apply with an empty component list should be rejected"
 else
   ok "apply with an empty component list is rejected"
@@ -172,7 +178,7 @@ XDG_DATA="$XDG_HOME/data"
 mkdir -p "$XDG_CONFIG" "$XDG_DATA"
 printf '[General]\nAccentColor=9,8,7\n' > "$XDG_CONFIG/kdeglobals"
 if HOME="$XDG_HOME" XDG_CONFIG_HOME="$XDG_CONFIG" XDG_DATA_HOME="$XDG_DATA" \
-  "$SCRIPT_DIR/files/bin/theme-profile" save xdg-profile --components=kdeglobals >/dev/null 2>&1 \
+  "$CLI_DIR/theme-profile" save xdg-profile --components=kdeglobals >/dev/null 2>&1 \
   && [ -f "$XDG_CONFIG/theme-profile/profiles/xdg-profile/.config/kdeglobals" ]; then
   ok "XDG_CONFIG_HOME is used for profiles and live config"
 else
@@ -199,7 +205,7 @@ MOCK_CALLS="$TMP_ROOT/mock-calls.log"
 echo "" > "$MOCK_CALLS"
 
 # Pre-apply validation should reject before stop_plasma_shell_for_restore
-if HOME="$FAKE_HOME" PATH="$MOCK_BIN:$PATH" "$SCRIPT_DIR/files/bin/theme-profile" apply nonexistent-profile >/dev/null 2>&1; then
+if HOME="$FAKE_HOME" PATH="$MOCK_BIN:$PATH" "$CLI_DIR/theme-profile" apply nonexistent-profile >/dev/null 2>&1; then
   fail "apply nonexistent-profile should exit non-zero"
 else
   ok "apply nonexistent-profile correctly exits non-zero"
@@ -223,11 +229,8 @@ for i in 1 2 3; do
   touch "$WALL_DIR/wallpaper-$i.png"
 done
 
-# Source the wallpaper-lib-like logic by testing the arithmetic directly
-FILES=(wall-1.png wall-2.png wall-3.png)
-COUNT=${#FILES[@]}
-
 # next: 0 → 1
+COUNT=3
 INDEX=$(( (0 + 1) % COUNT ))
 if [ "$INDEX" -eq 1 ]; then ok "wallpaper-next: 0→1"; else fail "wallpaper-next: expected 1 got $INDEX"; fi
 
@@ -246,23 +249,16 @@ if [ "$INDEX" -eq 0 ]; then ok "wallpaper-prev: 1→0"; else fail "wallpaper-pre
 # --- 7. wallpaper-prev stderr leak test ---------------------------------------
 echo "=== Section 7: wallpaper-prev handles missing state file ==="
 
-# wallpaper-prev should not emit errors to stderr when STATE file is missing
 STATE_FILE="$TMP_ROOT/missing-state"
 rm -f "$STATE_FILE"
-
-# Source the arithmetic and state-reading logic inline to test
-# (we can't run wallpaper-prev directly without plasma-apply-wallpaperimage)
-wall_prev_index() {
-  local index=0
-  local state="$1"
-  [ -f "$state" ] && index=$(cat "$state" 2>/dev/null || echo 0)
-  local count=$2
-  index=$(( (index - 1 + count) % count ))
-  echo "$index"
-}
-
-# This should not produce stderr output
-ERR_OUT=$(wall_prev_index "$STATE_FILE" 3 2>&1 1>/dev/null)
+# A real run against a fake dir with no files must exit 1 quietly (no stderr
+# leak when the state file is missing).
+mkdir -p "$TMP_ROOT/empty-walls"
+ERR_OUT="$(
+  WALLPAPER_DIR="$TMP_ROOT/empty-walls" WALLPAPER_STATE="$STATE_FILE" \
+    WALLPAPER_DRY_RUN=1 PLASMA_APPLETSRC="$TMP_ROOT/nope" \
+    "$CLI_DIR/wallpaper-prev" 2>&1 1>/dev/null || true
+)"
 if [ -z "$ERR_OUT" ]; then
   ok "wallpaper-prev: no stderr when state file missing"
 else
@@ -272,7 +268,6 @@ fi
 # --- 8. Wallpaper list order, next/prev anchoring -----------------------------
 echo "=== Section 8: Wallpaper list order and next/prev anchoring ==="
 
-WP_BIN="$SCRIPT_DIR/files/bin"
 WALL_TMP="$TMP_ROOT/wall-order"
 PLASMA_TMP="$TMP_ROOT/plasma-appletsrc"
 rm -rf "$WALL_TMP"
@@ -295,7 +290,7 @@ wall_run() { # script state
     WALLPAPER_STATE="$2" \
     WALLPAPER_DRY_RUN=1 \
     PLASMA_APPLETSRC="$TMP_ROOT/no-such-appletsrc" \
-    bash "$WP_BIN/$1"
+    "$CLI_DIR/$1"
 }
 
 STATE_O="$TMP_ROOT/wall-order-state"
@@ -331,7 +326,7 @@ fi
 printf '0' > "$STATE_O"
 got="$(basename "$(
   WALLPAPER_DIR="$WALL_TMP" WALLPAPER_STATE="$STATE_O" WALLPAPER_DRY_RUN=1 \
-    PLASMA_APPLETSRC="$PLASMA_TMP" bash "$WP_BIN/wallpaper-next"
+    PLASMA_APPLETSRC="$PLASMA_TMP" "$CLI_DIR/wallpaper-next"
 )")"
 if [ "$got" = "apple.png" ]; then
   ok "wallpaper-next anchors on the applied wallpaper (not the stale index)"
@@ -341,7 +336,7 @@ fi
 
 got="$(basename "$(
   WALLPAPER_DIR="$WALL_TMP" WALLPAPER_STATE="$STATE_O" WALLPAPER_DRY_RUN=1 \
-    PLASMA_APPLETSRC="$PLASMA_TMP" bash "$WP_BIN/wallpaper-prev"
+    PLASMA_APPLETSRC="$PLASMA_TMP" "$CLI_DIR/wallpaper-prev"
 )")"
 if [ "$got" = "UP.PNG" ]; then
   ok "wallpaper-prev anchors on the applied wallpaper"
@@ -349,44 +344,30 @@ else
   fail "wallpaper-prev anchoring: got $got want UP.PNG"
 fi
 
-# Garbage in the state file must not abort the scripts (set -e).
+# Garbage in the state file must not abort the CLI (equivalent of set -e).
 printf 'oops' > "$STATE_O"
 if WALLPAPER_DIR="$WALL_TMP" WALLPAPER_STATE="$STATE_O" WALLPAPER_DRY_RUN=1 \
     PLASMA_APPLETSRC="$TMP_ROOT/no-such-appletsrc" \
-    run_silent bash "$WP_BIN/wallpaper-next"; then
+    run_silent "$CLI_DIR/wallpaper-next"; then
   ok "wallpaper-next survives a non-numeric state file"
 else
   fail "wallpaper-next dies on a non-numeric state file"
 fi
 
-# --- 9. wallpapers scripts must not drift ------------------------------------
-echo "=== Section 9: wallpaper-* scripts share one enumeration ==="
+# --- 9. Wallpaper CLI binaries share one enumeration --------------------------
+echo "=== Section 9: wallpaper-* binaries share the enumeration ==="
 
-extract_block() { # file start_regex
-  awk -v start="$2" '$0 ~ start { f = 1 } f { print } f && /^\)$/ { exit }' "$1"
-}
-
-enum_picker="$(extract_block "$WP_BIN/wallpaper-picker" '^mapfile -t FILES')"
-enum_next="$(extract_block "$WP_BIN/wallpaper-next" '^mapfile -t FILES')"
-enum_prev="$(extract_block "$WP_BIN/wallpaper-prev" '^mapfile -t FILES')"
-
-if [ -n "$enum_picker" ] && [ "$enum_picker" = "$enum_next" ] && [ "$enum_next" = "$enum_prev" ]; then
-  ok "wallpaper-picker/next/prev enumerate the list identically"
+# The three binaries are built from the same Rust module (wallpaper.rs), so
+# the enumeration cannot drift between them. The actual order is verified by
+# walking `wallpaper-next` (section 8) and by TestWallpaperOrdering in pytest.
+all_wp_bins=1
+for wp_bin in wallpaper-picker wallpaper-next wallpaper-prev; do
+  [ -x "$CLI_DIR/$wp_bin" ] || all_wp_bins=0
+done
+if [ "$all_wp_bins" -eq 1 ]; then
+  ok "wallpaper-picker/next/prev are present and executable (shared enumeration)"
 else
-  fail "wallpaper-* enumeration blocks differ — the cached index would drift"
-fi
-
-extract_func() { # file name
-  awk -v fn="$2" '$0 ~ "^" fn "\\(\\) \\{$" { f = 1 } f { print } f && /^\}$/ { exit }' "$1"
-}
-
-fn_next="$(extract_func "$WP_BIN/wallpaper-next" plasma_wallpaper)"
-fn_prev="$(extract_func "$WP_BIN/wallpaper-prev" plasma_wallpaper)"
-
-if [ -n "$fn_next" ] && [ "$fn_next" = "$fn_prev" ]; then
-  ok "wallpaper-next/prev read the current Plasma wallpaper identically"
-else
-  fail "plasma_wallpaper() differs between wallpaper-next and wallpaper-prev"
+  fail "a wallpaper CLI binary is missing from $CLI_DIR"
 fi
 
 # --- 10. wallpaper-picker maps wofi's line number to the clicked image --------
@@ -412,7 +393,7 @@ pick() { # line
     WALLPAPER_STATE="$PICK_STATE" \
     WALLPAPER_THUMB_DIR="$TMP_ROOT/thumbs" \
     WALLPAPER_DRY_RUN=1 \
-    bash "$WP_BIN/wallpaper-picker"
+    "$CLI_DIR/wallpaper-picker"
 }
 
 got="$(basename "$(pick 0)")"
@@ -451,7 +432,7 @@ mkdir -p "$FAKE_HOME"
 
 gui_install() {
   env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
-    PATH="/usr/bin:/bin:/home/cbr/.local/bin" \
+    PATH="/usr/bin:/bin" \
     bash "$SCRIPT_DIR/scripts/install-kde-theme-manager.sh" --no-venv
 }
 
@@ -549,10 +530,10 @@ else
   fail "uninstall removed an unrelated directory"
 fi
 
-# The kit installer must bring up both the scripts and the GUI (and --no-gui
-# must install the scripts only).
+# The kit installer must bring up both the CLI and the GUI (and --no-gui must
+# install the CLI only).
 if env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
-  PATH="/usr/bin:/bin" \
+  PATH="/usr/bin:/bin" CARGO_HOME="$REAL_CARGO_HOME" \
   bash "$SCRIPT_DIR/scripts/install-theme-profile-kit.sh" --no-venv >/dev/null 2>&1; then
   ok "install-theme-profile-kit.sh runs"
 else
@@ -575,10 +556,10 @@ fi
 
 rm -rf "$FAKE_HOME/.local/share/kde-theme-manager" "$FAKE_HOME/.local/bin/kde-theme-manager"
 env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
-  PATH="/usr/bin:/bin" \
+  PATH="/usr/bin:/bin" CARGO_HOME="$REAL_CARGO_HOME" \
   bash "$SCRIPT_DIR/scripts/install-theme-profile-kit.sh" --no-gui >/dev/null 2>&1
 if [ ! -e "$FAKE_HOME/.local/bin/kde-theme-manager" ]; then
-  ok "--no-gui installs the scripts without the app"
+  ok "--no-gui installs the CLI without the app"
 else
   fail "--no-gui still installed the app"
 fi
@@ -587,14 +568,14 @@ if env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
   PATH="/usr/bin:/bin" \
   bash "$SCRIPT_DIR/scripts/uninstall-theme-profile-kit.sh" --force --no-gui >/dev/null 2>&1 &&
   [ ! -e "$FAKE_HOME/.local/bin/theme-profile" ]; then
-  ok "uninstall-theme-profile-kit.sh --force --no-gui removes the scripts"
+  ok "uninstall-theme-profile-kit.sh --force --no-gui removes the CLI"
 else
-  fail "kit uninstaller (--no-gui) did not remove the scripts"
+  fail "kit uninstaller (--no-gui) did not remove the CLI"
 fi
 
 # --- 12. Rust core ships with the GUI install --------------------------------
 # The GUI can run on two cores; the Rust one is a shared library the app loads
-# from <appdir>/lib and falls back to Bash when it is absent.
+# from <appdir>/lib and falls back to the CLI core when it is absent.
 echo "=== Section 12: Rust core installation ==="
 
 RUST_LIB_SRC="$SCRIPT_DIR/gui/qt-app/src/core/rust_core/target/release/libkde_theme_core.so"
@@ -672,12 +653,12 @@ if [ -f "$RUST_LIB_SRC" ]; then
   fi
 else
   # A fresh clone has no target/ tree: the installer must warn, not fail, and
-  # the app must fall back to the Bash core.
+  # the app must fall back to the CLI core.
   out="$(env -i HOME="$FAKE_HOME_RUST" XDG_DATA_HOME="$FAKE_HOME_RUST/.local/share" \
     PATH="/usr/bin:/bin" \
     bash "$SCRIPT_DIR/scripts/install-kde-theme-manager.sh" --no-venv 2>&1)"
   case "$out" in
-    *"Bash core"*) ok "missing Rust core warns about the Bash fallback" ;;
+    *"CLI core"*) ok "missing Rust core warns about the CLI fallback" ;;
     *) fail "missing Rust core produced no warning: $out" ;;
   esac
 fi
@@ -707,7 +688,7 @@ MOCK
 done
 
 if HOME="$LF_HOME" PATH="$MOCK_BIN_LF:$PATH" \
-  "$SCRIPT_DIR/files/bin/theme-profile" save lf-test >/dev/null 2>&1; then
+  "$CLI_DIR/theme-profile" save lf-test >/dev/null 2>&1; then
   ok "save copies the live kdeglobals into the profile"
 else
   fail "save lf-test failed"
@@ -717,7 +698,7 @@ fi
 HOME="$LF_HOME" kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage glass
 
 if HOME="$LF_HOME" PATH="$MOCK_BIN_LF:$PATH" \
-  "$SCRIPT_DIR/files/bin/theme-profile" apply lf-test >/dev/null 2>&1; then
+  "$CLI_DIR/theme-profile" apply lf-test >/dev/null 2>&1; then
   ok "apply lf-test exits 0 with mocked session commands"
 else
   fail "apply lf-test failed"

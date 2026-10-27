@@ -26,8 +26,8 @@ fn profile_delete_rejects_traversal_before_touching_disk() {
 
 #[test]
 fn profile_functions_reject_empty_components() {
-    assert!(profile::apply_profile("glass", Some(vec![])).is_err());
+    assert!(profile::apply_profile_impl("glass", Some(vec![])).is_err());
     // Validation happens before the script is executed, so no profile needs
     // to exist for this assertion.
-    assert!(profile::save_profile("glass", Some(vec![])).is_err());
+    assert!(profile::save_profile_impl("glass", Some(vec![])).is_err());
 }

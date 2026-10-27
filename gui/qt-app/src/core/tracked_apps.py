@@ -1,6 +1,6 @@
 """
 Tracked Applications Registry — полный список отслеживаемых приложений
-на основе TRACKED_PATHS из bash-версии theme-profile.
+(общая с Rust-ядром схема компонент → конфиги).
 """
 
 from dataclasses import dataclass
@@ -247,10 +247,9 @@ TRACKED_APPS: tuple[TrackedAppDef, ...] = (
         name="Zen Browser",
         category="Browser",
         config_paths=(
+            # Legacy fallback; the live paths come from zen_config_paths()
+            # (auto-detected profile directory).
             ".zen/gp0y8wrv.Default (release)/user.js",
-            ".zen/gp0y8wrv.Default (release)/chrome/userChrome.css",
-            ".zen/gp0y8wrv.Default (release)/chrome/userContent.css",
-            ".zen/gp0y8wrv.Default (release)/chrome/zen-themes.css",
         ),
         flatpak_id="app.zen_browser.zen",
         description="Firefox-based browser with user.js + userChrome.css theming",
@@ -324,6 +323,51 @@ def _check_configs_exist(paths: tuple[str, ...]) -> bool:
     return any(live_path(p).exists() for p in paths)
 
 
+# ──────────────────────────────────────────────────────────────
+# Zen Browser auto-detection (shared rules with the Rust core)
+# ──────────────────────────────────────────────────────────────
+
+def zen_profile_dir() -> str:
+    """Имя профиля Zen внутри `~/.zen` (первый по byte-order с user.js).
+
+    Раньше путь был хардкоднут (`.zen/gp0y8wrv.Default (release)/`), что
+    ломалось после переименования профиля. Правила зеркалят Rust:
+    `~/.zen/*Default*/user.js` → первый в byte-order → иначе legacy-имя.
+    """
+    import os
+
+    zen_root = os.path.join(os.path.expanduser("~"), ".zen")
+    candidates = []
+    try:
+        for entry in os.scandir(zen_root):
+            if entry.is_dir(follow_symlinks=False) and "Default" in entry.name:
+                if os.path.isfile(os.path.join(entry.path, "user.js")):
+                    candidates.append(entry.name)
+    except OSError:
+        pass
+    if candidates:
+        return sorted(candidates)[0]
+    return "gp0y8wrv.Default (release)"
+
+
+def zen_config_paths() -> tuple[str, ...]:
+    """Относительные пути конфигов Zen для обнаруженного профиля."""
+    base = f".zen/{zen_profile_dir()}"
+    return (
+        f"{base}/user.js",
+        f"{base}/chrome/userChrome.css",
+        f"{base}/chrome/userContent.css",
+        f"{base}/chrome/zen-themes.css",
+    )
+
+
+def config_paths_for(app: TrackedAppDef) -> tuple[str, ...]:
+    """Актуальные пути приложения (zen — авто-детект, остальные — static)."""
+    if app.id == "zen":
+        return zen_config_paths()
+    return app.config_paths
+
+
 def detect_app_status(app: TrackedAppDef) -> AppStatus:
     """Определить статус приложения."""
     # 1. Проверка команды установки
@@ -335,7 +379,7 @@ def detect_app_status(app: TrackedAppDef) -> AppStatus:
             return AppStatus.NOT_INSTALLED
 
     # 3. Проверка конфигов
-    if _check_configs_exist(app.config_paths):
+    if _check_configs_exist(config_paths_for(app)):
         return AppStatus.AVAILABLE
     else:
         # Установлено, но конфигов ещё нет (первый запуск)
@@ -349,7 +393,7 @@ def build_component(app: TrackedAppDef) -> Component:
         id=app.id,
         name=app.name,
         category=app.category,
-        config_paths=app.config_paths,
+        config_paths=config_paths_for(app),
         status=status,
         supports_live_reload=app.supports_live_reload,
         description=app.description,
@@ -367,7 +411,7 @@ def detect_all_apps() -> list[Component]:
 # Реализация TrackedAppsCore
 # ──────────────────────────────────────────────────────────────
 
-class BashTrackedAppsCore(TrackedAppsCore):
+class CliTrackedAppsCore(TrackedAppsCore):
     """Локальная реализация реестра отслеживаемых приложений."""
 
     def __init__(self):
@@ -411,5 +455,5 @@ __all__ = [
     "detect_all_apps",
     "detect_app_status",
     "build_component",
-    "BashTrackedAppsCore",
+    "CliTrackedAppsCore",
 ]

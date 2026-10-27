@@ -13,6 +13,7 @@ pub mod wallpaper;
 pub mod tracked_apps;
 pub mod settings;
 pub mod config_parser;
+pub mod status;
 
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
@@ -173,7 +174,7 @@ pub extern "C" fn kde_theme_core_profile_apply(
         }
     };
 
-    match profile::apply_profile(&name, components) {
+    match profile::apply_profile_impl(&name, components) {
         Ok(_) => 0,
         Err(e) => {
             set_last_error(e.to_string());
@@ -214,7 +215,7 @@ pub extern "C" fn kde_theme_core_profile_save(
         }
     };
 
-    match profile::save_profile(&name, components) {
+    match profile::save_profile_impl(&name, components) {
         Ok(_) => 0,
         Err(e) => {
             set_last_error(e.to_string());

@@ -9,6 +9,46 @@ use which;
 use crate::paths::live_path;
 use crate::types::Component;
 
+/// Auto-detect the Zen Browser profile directory name inside `~/.zen`.
+///
+/// The profile path used to be hardcoded (`.zen/gp0y8wrv.Default (release)/`),
+/// which broke after a profile rename or on other machines. Resolution rules
+/// (shared with the CLI adapter):
+///   * scan `~/.zen` for directories containing "Default" with a `user.js`;
+///   * pick the first one in byte order (deterministic);
+///   * fall back to the historical hardcoded name when nothing matches.
+pub fn zen_profile_dir() -> String {
+    let home = crate::paths::home_dir();
+    let zen_root = home.join(".zen");
+    let mut candidates: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&zen_root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let dir_name = entry.file_name().to_string_lossy().to_string();
+            if dir_name.contains("Default") && path.join("user.js").is_file() {
+                candidates.push(dir_name);
+            }
+        }
+    }
+    candidates.sort();
+    candidates
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| "gp0y8wrv.Default (release)".to_string())
+}
+
+/// Relative config paths for the detected Zen profile.
+pub fn zen_config_paths() -> Vec<String> {
+    let dir = zen_profile_dir();
+    let rel = |suffix: &str| format!(".zen/{dir}/{suffix}");
+    vec![
+        rel("user.js"),
+        rel("chrome/userChrome.css"),
+        rel("chrome/userContent.css"),
+        rel("chrome/zen-themes.css"),
+    ]
+}
+
 /// Tracked Apps Core Trait
 pub trait TrackedAppsCore {
     fn detect_all(&self) -> Result<Vec<Component>>;
@@ -303,12 +343,7 @@ fn get_tracked_apps() -> Vec<TrackedAppDef> {
             id: "zen".to_string(),
             name: "Zen Browser".to_string(),
             category: "Browser".to_string(),
-            config_paths: vec![
-                ".zen/gp0y8wrv.Default (release)/user.js".to_string(),
-                ".zen/gp0y8wrv.Default (release)/chrome/userChrome.css".to_string(),
-                ".zen/gp0y8wrv.Default (release)/chrome/userContent.css".to_string(),
-                ".zen/gp0y8wrv.Default (release)/chrome/zen-themes.css".to_string(),
-            ],
+            config_paths: zen_config_paths(),
             detect_command: None,
             flatpak_id: Some("app.zen_browser.zen".to_string()),
             supports_live_reload: false,

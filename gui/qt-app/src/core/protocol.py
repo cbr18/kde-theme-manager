@@ -1,7 +1,7 @@
 """
 Core Protocol (Abstract Base Classes) — КОНТРАКТ между UI и Core.
 
-Этот модуль НЕ МЕНЯЕТСЯ при замене BashCore на RustCore.
+Этот модуль НЕ МЕНЯЕТСЯ при замене CliCore на RustCore.
 UI и Controllers зависят только от этих абстракций.
 """
 
@@ -352,16 +352,16 @@ class AppSettings:
     create_backup_before_apply: bool = True
     notify_on_success: bool = True
 
-    # Какое ядро использовать при старте: "rust" | "bash" | "auto"
+    # Какое ядро использовать при старте: "rust" | "cli" | "auto"
     # (переопределяется флагом --core и переменной окружения KTM_CORE).
-    # "python" — устаревший псевдоним bash: старые настройки продолжают работать.
+    # "bash"/"python" — устаревшие псевдонимы cli: старые настройки работают.
     core_backend: str = "rust"
 
     def __post_init__(self) -> None:
         backend = str(self.core_backend or "rust").strip().lower()
-        if backend == "python":
-            backend = "bash"
-        if backend not in ("rust", "bash", "auto"):
+        if backend in ("python", "bash"):
+            backend = "cli"
+        if backend not in ("rust", "cli", "auto"):
             backend = "rust"
         if backend != self.core_backend:
             object.__setattr__(self, "core_backend", backend)
@@ -409,16 +409,16 @@ class AppSettings:
 class CoreFactory:
     """
     Фабрика для получения реализаций Core протоколов.
-    Позволяет подменять реализацию (BashCore → RustCore) в одной точке.
+    Позволяет подменять реализацию (CliCore → RustCore) в одной точке.
 
     Ядро выбирается флагом ``--core`` / переменной ``KTM_CORE`` / настройкой
     ``core_backend``; см. :meth:`set_backend`.
     """
 
-    #: Доступные бэкенды. "auto" — rust, если библиотека есть, иначе bash.
-    BACKENDS = ("rust", "bash", "auto")
-    #: Устаревшее имя бэкенда; сохранённые настройки и старые скрипты.
-    LEGACY_ALIASES = {"python": "bash"}
+    #: Доступные бэкенды. "auto" — rust, если библиотека есть, иначе cli.
+    BACKENDS = ("rust", "cli", "auto")
+    #: Устаревшие имена; сохранённые настройки и старые скрипты.
+    LEGACY_ALIASES = {"bash": "cli", "python": "cli"}
     #: Переменная окружения, переопределяющая настройку (но не флаг --core).
     ENV_VAR = "KTM_CORE"
 
@@ -429,8 +429,8 @@ class CoreFactory:
     _theme_core: Optional["ThemeCore"] = None
 
     # Пока ``_select_core`` не выбран явно, безопасный локальный бэкенд —
-    # bash. Приложение при старте выбирает rust по умолчанию (см. __main__).
-    _backend: str = "bash"
+    # cli (адаптер к Rust CLI). Приложение выбирает rust по умолчанию (см. __main__).
+    _backend: str = "cli"
 
     # ── Выбор ядра ─────────────────────────────────────────────
 
@@ -451,13 +451,13 @@ class CoreFactory:
         """Выбрать ядро и сбросить кэш реализаций.
 
         ``strict=False`` — «мягкий» режим: если Rust-библиотека недоступна,
-        используется Bash-ядро (с предупреждением в stderr). Возвращает
+        используется CLI-ядро (с предупреждением в stderr). Возвращает
         фактически используемый бэкенд.
         """
         name = cls.normalize_backend(backend)
 
         if name == "auto":
-            name = "rust" if cls.rust_available() else "bash"
+            name = "rust" if cls.rust_available() else "cli"
 
         if name == "rust" and not cls.rust_available():
             if strict:
@@ -470,10 +470,10 @@ class CoreFactory:
                     f"Searched: {searched}"
                 )
             print(
-                "Warning: Rust core unavailable, falling back to the Bash core",
+                "Warning: Rust core unavailable, falling back to the CLI core",
                 file=sys.stderr,
             )
-            name = "bash"
+            name = "cli"
 
         cls._backend = name
         cls.reset()
@@ -494,7 +494,7 @@ class CoreFactory:
     def backend_label(cls) -> str:
         """Человекочитаемое имя ядра для UI."""
         if cls._backend != "rust":
-            return "Bash"
+            return "CLI"
         from .rust_core import library_path
 
         path = library_path()
@@ -516,9 +516,9 @@ class CoreFactory:
             from .rust_core import RUST_FACTORIES
 
             return RUST_FACTORIES[kind]()
-        from .bash_core import BASH_FACTORIES
+        from .cli_core import CLI_FACTORIES
 
-        return BASH_FACTORIES[kind]()
+        return CLI_FACTORIES[kind]()
 
     # ── Ручная подмена (тесты) ─────────────────────────────────
 

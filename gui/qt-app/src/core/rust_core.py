@@ -7,18 +7,17 @@ JSON strings (``*mut c_char``, freed with ``kde_theme_core_free_string``) and
 ``kde_theme_core_get_error``.
 
 The four classes at the bottom implement the same protocol ABCs as
-``bash_core``, so controllers/QML cannot tell which core they are talking to
+``cli_core``, so controllers/QML cannot tell which core they are talking to
 (``CoreFactory`` picks one).
 
 Contract notes (both cores have to agree, otherwise switching backends changes
 behaviour):
 
-* Mutating profile operations delegate to the ``theme-profile`` bash script —
-  it owns the component→config-path mapping and the backups. The Rust side
-  reads profiles natively.
+* Mutating profile operations are implemented natively in Rust (the CLI
+  core shells out to the same ``theme-profile`` binary).
 * Wallpaper enumeration uses the directory from the app settings; it is pushed
   into the library with ``kde_theme_core_wallpaper_set_dir`` before every call,
-  mirroring ``BashWallpaperCore._script_env``.
+  mirroring ``CliWallpaperCore._script_env``.
 """
 
 from __future__ import annotations
@@ -341,9 +340,9 @@ class RustProfileCore(ProfileCore):
         return _call_status("kde_theme_core_profile_delete", name)
 
     def diff(self, a: str, b: str) -> str:
-        """Различия профилей. Как в Python-ядре, текст ошибки идёт с префиксом."""
+        """Различия профилей. Как в CLI-ядре, текст ошибки идёт с префиксом."""
         try:
-            return _call_text("kde_theme_core_profile_diff", a, b)
+            return _call_text("kde_theme_core_profile_diff", a, b).strip()
         except RustCoreError as exc:
             return f"Error: {exc}"
 
@@ -467,7 +466,7 @@ class RustSettingsCore(SettingsCore):
 # Factory registration
 # ──────────────────────────────────────────────────────────────
 
-#: bash backend name → rust backend equivalent
+#: cli backend name → rust backend equivalent
 RUST_FACTORIES: dict[str, Callable[[], object]] = {
     "profile": RustProfileCore,
     "wallpaper": RustWallpaperCore,

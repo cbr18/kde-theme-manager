@@ -98,16 +98,17 @@ theme-profile list
 ### Rolling back the GUI core
 
 The app can run on the Rust core (`libkde_theme_core.so`, the default) or the
-Bash core. If the Rust core misbehaves, go back to Bash — no reinstall needed:
+CLI core (shells to the Rust `theme-profile`). If the Rust core misbehaves,
+go back to the CLI core — no reinstall needed:
 
 ```bash
-kde-theme-manager --core bash     # this run
-KTM_CORE=bash kde-theme-manager   # or via the environment
-# Settings → Core → bash persists the choice for the next start
+kde-theme-manager --core cli      # this run
+KTM_CORE=cli kde-theme-manager    # or via the environment
+# Settings → Core → cli persists the choice for the next start
 ```
 
-`--core bash` is persisted too, so it survives restarts. The setting is stored
-in `~/.config/theme-profile/app-preferences.json` (`"core_backend": "bash"`),
+`--core cli` is persisted too, so it survives restarts. The setting is stored
+in `~/.config/theme-profile/app-preferences.json` (`"core_backend": "cli"`),
 which can also be edited by hand while the app is closed:
 
 ```bash
@@ -116,15 +117,15 @@ import json, os, pathlib
 root = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", pathlib.Path.home() / ".config"))
 path = root / "theme-profile" / "app-preferences.json"
 data = json.loads(path.read_text())
-data["core_backend"] = "bash"
+data["core_backend"] = "cli"
 path.write_text(json.dumps(data, indent=2) + "\n")
 PY
 ```
 
-The legacy value `"python"` is still accepted as an alias for `"bash"`, so old
-scripts and settings keep working.
+The legacy values `"python"` and `"bash"` are still accepted as aliases for
+`"cli"`, so old scripts and settings keep working.
 
-If the library is the problem, remove it — the app then reports the Bash core
+If the library is the problem, remove it — the app then reports the CLI core
 and keeps working:
 
 ```bash
@@ -133,10 +134,9 @@ kde-theme-manager --list-cores   # → rust NOT AVAILABLE
 ```
 
 Per-operation differences worth knowing when switching: profile writes
-(apply/save/diff) go through the same `theme-profile` script in both cores; the
-Rust core only takes over reading (profiles, components, wallpapers, app
-detection, settings). `tests/test_gui.py::TestCoreParity` fails if that ever
-drifts.
+(apply/save/diff) are native Rust in both cores; the CLI core reaches them
+through the `theme-profile` binary and the library through FFI. `tests/test_gui.py::TestCoreParity`
+fails if that ever drifts.
 
 ---
 

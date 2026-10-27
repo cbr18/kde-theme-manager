@@ -14,15 +14,15 @@ from .tracked_apps import (
     detect_all_apps,
     detect_app_status,
     build_component,
-    BashTrackedAppsCore
+    CliTrackedAppsCore
 )
 
-from .bash_core import (
-    BashProfileCore,
-    BashWallpaperCore,
-    BashTrackedAppsCore,
-    BashSettingsCore,
-    BASH_FACTORIES,
+from .cli_core import (
+    CliProfileCore,
+    CliWallpaperCore,
+    CliTrackedAppsCore,
+    CliSettingsCore,
+    CLI_FACTORIES,
 )
 
 __all__ = [
@@ -32,8 +32,8 @@ __all__ = [
     "CoreFactory",
     # Tracked apps
     "TRACKED_APPS", "TrackedAppDef", "detect_all_apps",
-    "detect_app_status", "build_component", "BashTrackedAppsCore",
-    # Bash core
-    "BashProfileCore", "BashWallpaperCore", "BashTrackedAppsCore", "BashSettingsCore",
-    "BASH_FACTORIES",
+    "detect_app_status", "build_component", "CliTrackedAppsCore",
+    # CLI core
+    "CliProfileCore", "CliWallpaperCore", "CliTrackedAppsCore", "CliSettingsCore",
+    "CLI_FACTORIES",
 ]

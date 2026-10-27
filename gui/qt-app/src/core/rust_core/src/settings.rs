@@ -54,12 +54,12 @@ pub fn load_settings() -> Result<AppSettings> {
 }
 
 /// Keep the saved core name in the vocabulary the launcher understands.
-/// "python" is the legacy alias for the bash adapter; unknown values fall
+/// "python"/"bash" are legacy aliases for the cli adapter; unknown values fall
 /// back to the default (Rust) instead of making the app unstartable.
 fn normalize_core_backend(settings: &mut AppSettings) {
     match settings.core_backend.as_str() {
-        "python" => settings.core_backend = "bash".to_string(),
-        "rust" | "bash" | "auto" => {}
+        "python" | "bash" => settings.core_backend = "cli".to_string(),
+        "rust" | "cli" | "auto" => {}
         _ => settings.core_backend = "rust".to_string(),
     }
 }

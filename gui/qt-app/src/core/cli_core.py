@@ -1,9 +1,10 @@
 """
-Bash Core Implementation — адаптер над существующими bash-скриптами.
+CLI Core Implementation — адаптер над Rust CLI.
 
 Профильные операции и навигация по обоям вызывают ``theme-profile`` и
-``wallpaper-*``; настройки приложения и реестр отслеживаемых приложений
-реализованы локально, потому что отдельных bash-команд для них нет.
+``wallpaper-*`` (Rust-бинари из ``rust_core``); настройки приложения и
+реестр отслеживаемых приложений реализованы локально, потому что
+отдельных CLI-команд для них нет.
 """
 
 import json
@@ -30,15 +31,17 @@ from .protocol import (
     ProfileCore, WallpaperCore, TrackedAppsCore, SettingsCore,
     ProfileInfo, Result, AppSettings, Component, AppStatus, CoreFactory
 )
-from .tracked_apps import BashTrackedAppsCore, detect_all_apps, TRACKED_APPS
+from .tracked_apps import (
+    CliTrackedAppsCore, detect_all_apps, config_paths_for, TRACKED_APPS
+)
 
 
 # ──────────────────────────────────────────────────────────────
 # Profile Core
 # ──────────────────────────────────────────────────────────────
 
-class BashProfileCore(ProfileCore):
-    """Обёртка над theme-profile bash скриптом."""
+class CliProfileCore(ProfileCore):
+    """Обёртка над Rust CLI `theme-profile`."""
 
     def __init__(self, theme_profile_bin: str = "theme-profile"):
         # Resolve binary path: check PATH, then fallback to ~/.local/bin/
@@ -125,7 +128,7 @@ class BashProfileCore(ProfileCore):
         # Определяем компоненты по наличию директорий в профиле
         comps = []
         for app_def in TRACKED_APPS:
-            for rel_path in app_def.config_paths:
+            for rel_path in config_paths_for(app_def):
                 if (directory / rel_path).exists():
                     comps.append(app_def.id)
                     break
@@ -194,7 +197,7 @@ class BashProfileCore(ProfileCore):
         return self._run(args, timeout=60)
 
     def delete(self, name: str) -> Result:
-        # Нет в bash — делаем вручную
+        # Нет в CLI — делаем локально (как в Rust-ядре)
         try:
             directory = profile_dir(name)
         except ValueError as exc:
@@ -238,13 +241,13 @@ class BashProfileCore(ProfileCore):
 # Wallpaper Core
 # ──────────────────────────────────────────────────────────────
 
-# Extensions and ordering *must* match files/bin/wallpaper-{picker,next,prev}:
+# Extensions and ordering *must* match the Rust CLI wallpaper-{picker,next,prev}:
 # the cached index is a position in that list, not a file name.
 WALLPAPER_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
 
 
-class BashWallpaperCore(WallpaperCore):
-    """Обёртка над wallpaper-* bash скриптами."""
+class CliWallpaperCore(WallpaperCore):
+    """Обёртка над Rust CLI wallpaper-* бинарями."""
 
     def __init__(self):
         self._wallpaper_dir: Optional[Path] = None
@@ -363,10 +366,10 @@ class BashWallpaperCore(WallpaperCore):
         return None
 
     def list_wallpapers(self) -> list[str]:
-        """Файлы обоев в том же порядке, что и в bash-скриптах.
+        """Файлы обоев в том же порядке, что и в Rust CLI.
 
         The cached index is a *position* in this list, so the ordering rules
-        have to match files/bin/wallpaper-{picker,next,prev} exactly:
+        have to match the Rust CLI wallpaper-{picker,next,prev} exactly:
         symlinks are followed (Path.is_file(), like find -L), the same
         extensions are accepted, and the sort is by the path string, i.e.
         code-point order — identical to `LC_ALL=C sort` over the UTF-8 bytes,
@@ -395,7 +398,7 @@ class BashWallpaperCore(WallpaperCore):
 SETTINGS_FILE = settings_file()
 
 
-class BashSettingsCore(SettingsCore):
+class CliSettingsCore(SettingsCore):
     """Настройки приложения в JSON."""
 
     def load(self) -> AppSettings:
@@ -429,17 +432,17 @@ class BashSettingsCore(SettingsCore):
 # ──────────────────────────────────────────────────────────────
 
 __all__ = [
-    "BashProfileCore",
-    "BashWallpaperCore",
-    "BashTrackedAppsCore",
-    "BashSettingsCore",
-    "BASH_FACTORIES",
+    "CliProfileCore",
+    "CliWallpaperCore",
+    "CliTrackedAppsCore",
+    "CliSettingsCore",
+    "CLI_FACTORIES",
 ]
 
 #: Ядро, выбираемое CoreFactory._build() — см. CoreFactory.set_backend()
-BASH_FACTORIES = {
-    "profile": BashProfileCore,
-    "wallpaper": BashWallpaperCore,
-    "tracked_apps": BashTrackedAppsCore,
-    "settings": BashSettingsCore,
+CLI_FACTORIES = {
+    "profile": CliProfileCore,
+    "wallpaper": CliWallpaperCore,
+    "tracked_apps": CliTrackedAppsCore,
+    "settings": CliSettingsCore,
 }

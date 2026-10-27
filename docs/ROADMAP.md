@@ -1,17 +1,16 @@
 # KDE Theme Manager — Полный план разработки (Roadmap)
 
-> **Версионирование:** актуальная линия — `0.4.0`. Экспериментальные теги
+> **Версионирование:** актуальная линия — `0.5.0`. Экспериментальные теги
 > `v1.0.0`–`v1.1.2` оставлены в истории, но публично откатаны: они не являются
-> стабильной линией. Новые релизы продолжаются с `v0.4.0`.
+> стабильной линией. Новые релизы продолжаются с `v0.5.0`.
 
 ---
 
-## v0.4.0 — Qt/QML (текущий этап)
+## v0.5.0 — Qt/QML (текущий этап)
 
 ### ✅ Готово
 - [x] Clean Architecture: `core/protocol.py` (ABC contracts)
-- [x] BashCore: обёртки над bash (`theme-profile`, `wallpaper-*`); настройки и
-  реестр приложений — локально
+- [x] RustCore + Rust CLI: нативные мутации/status, CLI-адаптер (`cli_core.py`)
 - [x] TrackedAppsCore: 20 приложений с авто-детектом
 - [x] Controllers: Profile, Wallpaper, TrackedApps, Settings, Main
 - [x] ThemeController: dogfooding (glass/paper/dark/light/system)
@@ -20,7 +19,7 @@
 - [x] Components: ProfileCardDelegate, ProfileRadioButton, ComponentCategoryGroup, ComponentCheckbox
 - [x] Install/Update/Uninstall скрипты для Qt app
 - [x] pyproject.toml, README, .gitignore
-- [x] Git tags: v0.1.0 (bash), v0.2.0-dev, v0.3.0, v0.4.0 (Qt)
+- [x] Git tags: v0.1.0 (bash), v0.2.0-dev, v0.3.0, v0.5.0 (Qt)
 
 ### 🔄 В процессе / Нужно доделать
 
@@ -89,23 +88,27 @@
 
 ## v0.5.0 — Rust Core polish & Single Binary
 
-> **Статус: Phase 1–2 сделаны** (выбор ядра флагом, паритет с Bash покрыт
-> тестами). Файлы Rust-крейта: `src/core/rust_core/src/{lib,ffi,types,profile,
-> wallpaper,tracked_apps,settings,config_parser}.rs`; Python-биндинг —
-> `src/core/rust_core.py`. Мутирующие операции профилей (`apply`/`save`/`diff`)
-> делегируются bash-скрипту `theme-profile` — он владеет картой
-> «компонент → конфиг» и бэкапами; нативное переписывание один раз уже
-> скопировало `kwinrc` в `~/kwin` и перезапускало plasmashell на каждый apply.
-> Переключение: `--core rust|bash|auto`, `$KTM_CORE`, *Settings → Core*;
+> **Сделано (0.5.0).** The bash scripts are gone: the CLI is a single Rust
+> binary set (`theme-profile`, `theme-menu`, `wallpaper-picker/next/prev`) built
+> from `src/core/rust_core/src/bin/`; mutations (`apply`/`save`/`diff`) run
+> natively in `profile.rs` (no delegation); `status` is a data-driven native
+> module (~1 ms instead of ~300 ms) with strict JSONC/INI readers, a real
+> `kwin_glass` (better-blur-dx) and Zen auto-detection; the GUI diff runs
+> off-thread. Two cores remain: `rust` (library, default) and `cli` (adapter to
+> the Rust CLI; `python`/`bash` are legacy aliases). Файлы Rust-крейта:
+> `src/core/rust_core/src/{lib,ffi,types,paths,profile,wallpaper,tracked_apps,
+> settings,config_parser,status}.rs` + `src/bin/`; Python-биндинг —
+> `src/core/rust_core.py`; CLI-адаптер — `src/core/cli_core.py`.
+> Переключение: `--core rust|cli|auto`, `$KTM_CORE`, *Settings → Core*;
 > Rust — по умолчанию, без собранной библиотеки приложение работает на
-> Bash-ядре.
+> CLI-ядре.
 
 ### Архитектура
 ```
 src/
 ├── core/
 │   ├── protocol.py       # ABC (остаётся)
-│   ├── bash_core.py      # Bash adapter (theme-profile / wallpaper-*)
+│   ├── cli_core.py       # CLI adapter (theme-profile / wallpaper-*)
 │   └── rust_core/        # Новый Rust crate
 │       ├── Cargo.toml
 │       ├── src/
@@ -153,7 +156,7 @@ src/
 #### Phase 2: Python Bindings (cffi / pyo3)
 - [ ] Вариант A: `cffi` — загрузка `.so` через `ctypes`/`cffi`, сохраняем Python controllers
 - [ ] Вариант B: `pyo3` — нативный Python модуль, быстрее, но сложнее сборка
-- [x] Обновить `CoreFactory` для выбора `RustCore` vs `BashCore`
+- [x] Обновить `CoreFactory` для выбора `RustCore` vs `CliCore`
 
 #### Phase 3: Standalone Binary
 - [ ] `cargo build --release --bin kde-theme-manager`
@@ -231,7 +234,7 @@ plasma-applet/
 |--------|---------|-------|-----------|
 | v0.2.x | Python 3.11+, PySide6, uv | pip/uv | GitHub Releases |
 | v0.3.0 | + KNotification | | |
-| v0.4.0 | Python 3.11+, PySide6, Rust 1.75+ (default) | uv, cargo | GitHub Releases |
+| v0.5.0 | Python 3.11+, PySide6, Rust 1.75+ (default) | uv, cargo | GitHub Releases |
 | v0.5.0 | Rust polish, single binary | cargo + pip | Single binary |
 | v1.0.0 | C++17, Qt6, KDE Frameworks 6 | CMake, ECM | AUR, Flatpak, KDE Store |
 
@@ -312,5 +315,5 @@ cd ~/theme-profile-kit
 
 ---
 
-*Последнее обновление: v0.4.0*
+*Последнее обновление: v0.5.0*
 *Репозиторий: https://github.com/cbr18/kde-theme-manager*

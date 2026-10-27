@@ -8,7 +8,7 @@ Instructions for AI agents and contributors working in this repository.
 
 | Area | Source |
 |---|---|
-| Bash CLI | `files/bin/theme-profile`, `theme-menu`, `wallpaper-picker`, `wallpaper-next`, `wallpaper-prev` |
+| Rust CLI | `gui/qt-app/src/core/rust_core/src/bin/` (`theme-profile`, `theme-menu`, `wallpaper-*`) |
 | Qt/QML GUI ("KDE Theme Manager") | `gui/qt-app/` |
 | Install / update / uninstall | `scripts/*.sh` |
 | Tests | `tests/test-scripts.sh`, `gui/qt-app/tests/` |
@@ -49,8 +49,8 @@ A change is not done until the docs agree with the code. At minimum:
 ## Contracts that must not drift
 
 - **Profile-name validation**: `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, implemented
-  identically in `gui/qt-app/src/core/paths.py` (`validate_profile_name`), bash
-  `files/bin/theme-profile`, and the Rust core (`src/paths.rs`). Names are single
+  identically in `gui/qt-app/src/core/paths.py` (`validate_profile_name`), the
+  Rust CLI + core (`src/paths.rs`). Names are single
   path components; reject anything else (traversal, separators, leading dot).
 - **XDG-aware paths**: live files resolve through `XDG_CONFIG_HOME` /
   `XDG_DATA_HOME` / `XDG_CACHE_HOME`. The data root prefers an existing
@@ -68,27 +68,26 @@ A change is not done until the docs agree with the code. At minimum:
   tests and dry runs).
 - **JSONC files** (Zed / VS Code / Cursor / Obsidian / fastfetch) are patched by
   value position and never reserialised.
-- **Two interchangeable cores**: Bash (`gui/qt-app/src/core/bash_core.py`) drives
-  `theme-profile` / `wallpaper-*` and keeps settings/app detection local; Rust
-  (`gui/qt-app/src/core/rust_core/`) must stay at parity
-  (`tests/test_gui.py::TestCoreParity`). Rust is the default; select with
-  `--core`, `$KTM_CORE` or *Settings → Core*. `python` is a legacy alias for
-  `bash`.
+- **Two interchangeable cores**: CLI (`gui/qt-app/src/core/cli_core.py`) shells to
+  the Rust CLI for profile/wallpaper operations; Rust (`gui/qt-app/src/core/rust_core/`)
+  works natively through a shared library. Rust is the default; select with
+  `--core`, `$KTM_CORE` or *Settings → Core*. `python`/`bash` are legacy aliases
+  for `cli`.
 
 ## Verification (run before committing)
 
 ```bash
+# Build the Rust CLI first
+cd gui/qt-app/src/core/rust_core && cargo build --release && cargo test && cargo clippy --all-targets -- -D warnings
+
 # Python tests (offscreen Qt; ~159 tests)
 cd gui/qt-app && QT_QPA_PLATFORM=offscreen uv run --project . --extra dev pytest tests -q
 
-# Bash tests (~96 assertions) — from the repo root
+# Bash + installer tests (~90 assertions) — from the repo root
 bash tests/test-scripts.sh
 
-# Rust core
-cd gui/qt-app/src/core/rust_core && cargo test && cargo clippy --all-targets -- -D warnings
-
-# Shell static analysis
-shellcheck files/bin/* scripts/*.sh tests/*.sh
+# Shell static analysis (installer scripts)
+shellcheck scripts/*.sh tests/test-scripts.sh
 
 # QML lint
 find gui/qt-app/qml -name '*.qml' -print0 | xargs -0 qmllint
@@ -99,8 +98,8 @@ codebase to satisfy them unless asked.
 
 ## Editing rules
 
-1. Edit `files/bin/*` for the CLI; deploy with
-   `scripts/install-theme-profile-kit.sh`.
+1. Edit `gui/qt-app/src/core/rust_core/**` for the CLI and core; deploy with
+   `scripts/install-theme-profile-kit.sh` (builds with `cargo build --release`).
 2. Edit `gui/qt-app/**` for the GUI; deploy with
    `scripts/install-kde-theme-manager.sh` (or the kit installer).
 3. Do **not** edit `~/.config/kwinrc`, `plasmashellrc`, `kdeglobals` without a

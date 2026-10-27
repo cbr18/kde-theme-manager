@@ -1,7 +1,7 @@
 """
 KDE Theme Profile Manager — Qt/QML Application Entry Point.
 
-v0.4.0 — Native KDE UI with Kirigami, Clean Architecture.
+v0.5.0 — Native KDE UI with Kirigami, Clean Architecture, Rust core + CLI.
 """
 
 import os
@@ -35,13 +35,13 @@ from core.protocol import Result, ProfileInfo, Component, AppStatus, AppSettings
 def _show_help() -> int:
     """Print help to stdout (avoids QWidget/QApplication dependency)."""
     print(
-        """KDE Theme Profile Manager v0.4.0
+        """KDE Theme Profile Manager v0.5.0
 A Qt/QML-based theme profile manager for KDE Plasma.
 
 Usage: kde-theme-manager [options]
 
 Options:
-  --core NAME    Core implementation: rust | bash | auto
+  --core NAME    Core implementation: rust | cli | auto
                  (rust is the default; auto picks rust when built)
   --list-cores   Show the available cores and exit
   --help, -h     Show this help message
@@ -49,7 +49,7 @@ Options:
 
 Without --core the value of $KTM_CORE is used, then the saved setting
 (Settings page → Core). An explicitly requested but missing Rust core is an
-error; an unavailable saved setting falls back to Bash with a warning.
+error; an unavailable saved setting falls back to the CLI core with a warning.
 
 Requires KDE Plasma 6 + Kirigami (org.kde.kirigami, org.kde.desktop QML modules).
 For PySide6 bundled Qt, ensure system QML import paths are available.
@@ -71,7 +71,7 @@ def _extract_core_arg() -> Optional[str]:
             requested = arg.split("=", 1)[1]
         elif arg == "--core":
             if index + 1 >= len(args):
-                raise SystemExit("--core requires a value: rust | bash | auto")
+                raise SystemExit("--core requires a value: rust | cli | auto")
             index += 1
             requested = args[index]
         else:
@@ -97,7 +97,7 @@ def _list_cores() -> int:
         print("         searched:")
         for candidate in library_candidates():
             print(f"           {candidate}")
-    print("bash     always available (delegates to theme-profile / wallpaper-*; local settings)")
+    print("cli      always available (delegates to the Rust CLI theme-profile / wallpaper-*; local settings)")
     return 0
 
 
@@ -114,9 +114,9 @@ def _select_core(requested: Optional[str]) -> None:
 
     if requested is None:
         try:
-            from core.bash_core import BashSettingsCore
+            from core.cli_core import CliSettingsCore
 
-            requested = BashSettingsCore().load().core_backend or "rust"
+            requested = CliSettingsCore().load().core_backend or "rust"
         except Exception:
             requested = "rust"
 
@@ -132,9 +132,9 @@ def _select_core(requested: Optional[str]) -> None:
         # Persist the choice so the launcher and the next start agree.
         try:
             from core.protocol import AppSettings
-            from core.bash_core import BashSettingsCore
+            from core.cli_core import CliSettingsCore
 
-            settings_core = BashSettingsCore()
+            settings_core = CliSettingsCore()
             settings = settings_core.load()
             if settings.core_backend != CoreFactory.backend():
                 settings_core.save(
@@ -218,7 +218,7 @@ def main() -> int:
 
     # Handle --version
     if "--version" in sys.argv:
-        print("KDE Theme Manager 0.4.0")
+        print("KDE Theme Manager 0.5.0")
         return 0
 
     if "--list-cores" in sys.argv:
@@ -229,7 +229,7 @@ def main() -> int:
 
     # Настройка приложения
     QCoreApplication.setApplicationName("KDE Theme Manager")
-    QCoreApplication.setApplicationVersion("0.4.0")
+    QCoreApplication.setApplicationVersion("0.5.0")
     QCoreApplication.setOrganizationName("cbr")
     QCoreApplication.setOrganizationDomain("github.com/cbr18/kde-theme-manager")
 

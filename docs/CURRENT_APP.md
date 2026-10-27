@@ -1,13 +1,13 @@
-# Текущее приложение: theme-profile-kit (0.4.0)
+# Текущее приложение: theme-profile-kit (0.5.0)
 
-> **Статус**: 0.4.0 — Bash CLI + Qt/QML приложение KDE Theme Manager.
+> **Статус**: 0.5.0 — Rust CLI + Qt/QML приложение KDE Theme Manager.
 > **GUI**: устанавливается по умолчанию (см. [gui/qt-app/README.md](../gui/qt-app/README.md)).
 
 ---
 
 ## Обзор
 
-`theme-profile-kit` — Bash CLI и Qt/QML приложение для сохранения и применения профилей оформления KDE Plasma. Позволяет переключаться между темами **glass** (прозрачное стекло с размытием) и **paper** (светлая solid тема) одной командой.
+`theme-profile-kit` — Rust CLI и Qt/QML приложение для сохранения и применения профилей оформления KDE Plasma. Позволяет переключаться между темами **glass** (прозрачное стекло с размытием) и **paper** (светлая solid тема) одной командой.
 
 ---
 
@@ -154,7 +154,7 @@ wallpaper-prev                   # предыдущие обои
 
 ## Правило редактирования
 
-1. Править файлы в `~/theme-profile-kit/files/bin/`
+1. Править Rust CLI в `~/theme-profile-kit/gui/qt-app/src/core/rust_core/src/bin/`
 2. Запустить `~/theme-profile-kit/scripts/install-theme-profile-kit.sh`
 3. **Не редактировать** `~/.local/bin/` напрямую (или сразу скопировать изменения обратно в kit)
 
@@ -162,7 +162,7 @@ wallpaper-prev                   # предыдущие обои
 
 ## GUI: Theme Inspector
 
-Qt/QML-приложение (`gui/qt-app/`) уже ставится установщиком рядом с Bash-скриптами. Помимо профилей и обоев в нём есть страница **Theme**:
+Qt/QML-приложение (`gui/qt-app/`) уже ставится установщиком рядом с Rust CLI. Помимо профилей и обоев в нём есть страница **Theme**:
 
 - 69 live-полей в секциях Colors, Typography, Windows & Effects, Desktop & Assets, Applications + Advanced;
 - переключатель scope `Live | <profile>` и diff по полям; скопы профилей —
@@ -180,7 +180,7 @@ Qt/QML-приложение (`gui/qt-app/`) уже ставится устано
 
 Инспектор — отдельный Python-модуль (`CoreFactory.theme_core()`), не одно из
 выбираемых ядер `--core`, поэтому он работает одинаково при `--core rust` и
-`--core bash`. Подробности: [THEME_INSPECTOR.md](THEME_INSPECTOR.md), ТЗ: [TZ-THEME-INSPECTOR.md](TZ-THEME-INSPECTOR.md).
+`--core cli`. Подробности: [THEME_INSPECTOR.md](THEME_INSPECTOR.md), ТЗ: [TZ-THEME-INSPECTOR.md](TZ-THEME-INSPECTOR.md).
 
 ---
 
@@ -195,7 +195,7 @@ Qt/QML-приложение (`gui/qt-app/`) уже ставится устано
 
 Ранее числившиеся ограничения закрыты: гранулярность (`--components`), детект
 приложений, превью/diff профилей, настраиваемая папка обоев, native Qt/QML UI,
-а также смена ядра (Rust/Bash) через `--core`, `$KTM_CORE` и Settings.
+а также смена ядра (Rust/CLI) через `--core`, `$KTM_CORE` и Settings.
 
 ---
 
@@ -232,7 +232,7 @@ $XDG_CONFIG_HOME/theme-profile/        # по умолчанию ~/.config/theme
 | Проект | Путь | Описание |
 |--------|------|----------|
 | `rgb-control-kit` | `~/rgb-control-kit/` | Управление RGB устройствами |
-| `theme-profile-kit` | `~/theme-profile-kit/` | **Этот проект** (bash версия) |
+| `theme-profile-kit` | `~/theme-profile-kit/` | **Этот проект** (Rust CLI + Qt) |
 | `taskmanager-newinstance` | `~/projects/kde_mods/taskmanager-newinstance/` | KWin таскбар мод (C++) |
 | `mdock` | `~/projects/mdock/` | Markdown vault server (Go) |
 
@@ -246,9 +246,9 @@ $XDG_CONFIG_HOME/theme-profile/        # по умолчанию ~/.config/theme
 - Детект установленных приложений — **сделано**
 - Dogfooding (приложение само темизируется) — **сделано**
 - Clean Architecture для замены Core на Rust — **сделано**: два взаимозаменяемых
-  ядра, Rust (по умолчанию) и Bash, выбор через `--core rust|bash|auto`,
+  ядра, Rust (по умолчанию) и CLI-адаптер, выбор через `--core rust|cli|auto`,
   `$KTM_CORE` или *Settings → Core*; Rust-библиотека `libkde_theme_core.so`
   ставится в `~/.local/share/kde-theme-manager/lib/`, при её отсутствии
-  приложение откатывается на Bash-ядро. `python` остаётся legacy-псевдонимом
-  `bash` для старых настроек. Паритет ядер проверяется
+  приложение откатывается на CLI-ядро. `python`/`bash` остаются legacy-
+  псевдонимами `cli`. Паритет ядер проверяется
   `tests/test_gui.py::TestCoreParity`.

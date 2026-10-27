@@ -561,11 +561,24 @@ Kirigami.ApplicationWindow {
 
         function updateDiff() {
             if (profileA !== "" && profileB !== "" && profileA !== profileB) {
-                diffText.text = profileController.diffProfiles(profileA, profileB)
+                diffText.text = qsTr("Comparing…")
+                profileController.requestDiff(profileA, profileB)
             } else if (profileA === profileB) {
                 diffText.text = qsTr("No differences: both profiles are \"%1\".").arg(profileA)
             } else {
                 diffText.text = qsTr("No active profile to compare with.")
+            }
+        }
+
+        // The diff can be large (recursive comparison of config trees), so it
+        // is computed off the GUI thread; requestDiff emits diffReady with the
+        // requested pair so a stale result cannot overwrite a newer request.
+        Connections {
+            target: profileController
+            function onDiffReady(a, b, text) {
+                if (a === diffDialog.profileA && b === diffDialog.profileB) {
+                    diffText.text = text
+                }
             }
         }
 
@@ -667,7 +680,17 @@ Kirigami.ApplicationWindow {
             } else if (active === previewDialog.previewProfile) {
                 previewDialog.diffContent = qsTr("\"%1\" is already the active profile.").arg(previewDialog.previewProfile)
             } else {
-                previewDialog.diffContent = profileController.diffProfiles(active, previewDialog.previewProfile)
+                previewDialog.diffContent = qsTr("Comparing…")
+                profileController.requestDiff(active, previewDialog.previewProfile)
+            }
+        }
+
+        Connections {
+            target: profileController
+            function onDiffReady(a, b, text) {
+                if (a === previewDialog.activeProfile && b === previewDialog.previewProfile) {
+                    previewDialog.diffContent = text
+                }
             }
         }
 

@@ -4,7 +4,8 @@ set -euo pipefail
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 
 KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC_DIR="$KIT_DIR/files/bin"
+RUST_DIR="$KIT_DIR/gui/qt-app/src/core/rust_core"
+RELEASE_DIR="$RUST_DIR/target/release"
 DEST_DIR="${XDG_BIN_HOME:-$HOME/.local/bin}"
 CONFIGDIR="${XDG_CONFIG_HOME:-$HOME/.config}"
 BACKUP_ROOT="$CONFIGDIR/theme-profile/backups"
@@ -15,17 +16,19 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   cat <<'EOF'
 Usage: install-theme-profile-kit.sh [OPTIONS]
 
-Install theme-profile-kit: the command line scripts and (by default) the
+Install theme-profile-kit: the Rust CLI (theme-profile, theme-menu,
+wallpaper-picker, wallpaper-next, wallpaper-prev) and by default the
 KDE Theme Manager GUI with its launcher and desktop entry.
 
 Options:
-  --no-gui      Install only the scripts, skip the Qt/QML application
+  --no-gui      Install only the CLI, skip the Qt/QML application
   --with-venv   Always build a venv inside the installed app (passed through)
   --no-venv     Never build a venv — use the system PySide6 (passed through)
   -h, --help    Show this help message and exit.
 
-Scripts installed to ${XDG_BIN_HOME:-~/.local/bin}:
+Binaries installed to ${XDG_BIN_HOME:-~/.local/bin}:
   theme-profile, theme-menu, wallpaper-picker, wallpaper-next, wallpaper-prev
+(built with `cargo build --release` in gui/qt-app/src/core/rust_core)
 
 The GUI is installed by scripts/install-kde-theme-manager.sh (see its --help
 for paths, --with-venv/--no-venv and what gets installed).
@@ -54,33 +57,40 @@ SCRIPTS=(
   "wallpaper-prev"
 )
 
-say "Installing theme-profile-kit scripts"
+say "Installing theme-profile-kit CLI (Rust)"
 mkdir -p "$DEST_DIR" "$BACKUP_DIR/bin"
 
-# Validate all source files exist before doing anything
+# The CLI is the core deliverable since 0.5.0 (files/bin/* bash scripts are
+# gone); building it requires cargo.
+if ! command -v cargo >/dev/null 2>&1; then
+  say "Error: cargo not found — cannot build the Rust CLI (theme-profile etc.)." >&2
+  exit 1
+fi
+
+say "Building the Rust CLI (cargo build --release)"
+( cd "$RUST_DIR" && cargo build --release --bins )
 for script in "${SCRIPTS[@]}"; do
-  if [ ! -f "$SRC_DIR/$script" ]; then
-    say "Missing source: $SRC_DIR/$script" >&2
+  if [ ! -x "$RELEASE_DIR/$script" ]; then
+    say "Missing built binary: $RELEASE_DIR/$script" >&2
     exit 1
   fi
 done
 
 # Back up existing files
-say "Backing up existing scripts..."
+say "Backing up existing binaries..."
 for script in "${SCRIPTS[@]}"; do
   if [ -e "$DEST_DIR/$script" ]; then
     cp -a "$DEST_DIR/$script" "$BACKUP_DIR/bin/$script"
   fi
 done
 
-# Install new scripts
+# Install new binaries
 for script in "${SCRIPTS[@]}"; do
   say "Installing $script"
-  cp -a "$SRC_DIR/$script" "$DEST_DIR/$script"
-  chmod 0755 "$DEST_DIR/$script"
+  install -m 0755 "$RELEASE_DIR/$script" "$DEST_DIR/$script"
 done
 
-say "Installed theme-profile-kit scripts to $DEST_DIR"
+say "Installed theme-profile-kit CLI to $DEST_DIR"
 say "Backup: $BACKUP_DIR"
 
 # ── GUI (Qt/QML app + launcher + desktop entry) ─────────────────────────────
@@ -88,7 +98,7 @@ if [ "$WITH_GUI" -eq 1 ]; then
   if [ -x "$KIT_DIR/scripts/install-kde-theme-manager.sh" ]; then
     "$KIT_DIR/scripts/install-kde-theme-manager.sh" ${GUI_ARGS[@]+"${GUI_ARGS[@]}"}
   else
-    say "GUI installer not found — skipping the app (scripts only)."
+    say "GUI installer not found — skipping the app (CLI only)."
   fi
 else
   say "Skipped the GUI (--no-gui)."

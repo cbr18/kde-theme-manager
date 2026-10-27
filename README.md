@@ -30,11 +30,11 @@
 
 ## Contents / Состав
 
-### Bash Toolkit (core)
+### Rust CLI (core)
 
 | Script | Purpose |
 |--------|---------|
-| `theme-profile` | CLI: save/apply/list/diff/status профилей |
+| `theme-profile` | Rust CLI: save/apply/list/diff/delete/status профилей |
 | `theme-menu` | wofi‑menu for applying, saving, restarting Plasma, status |
 | `wallpaper-picker` | Choose wallpaper via wofi with thumbnail preview |
 | `wallpaper-next` / `wallpaper-prev` | Cycle wallpapers |
@@ -43,15 +43,15 @@
 
 | Component | Purpose |
 |-----------|---------|
-| `gui/qt-app/` | **KDE Theme Manager** — native Qt/QML + Kirigami desktop app with profile cards, wallpaper picker, settings, system tray, and two interchangeable cores (Rust / Bash) |
+| `gui/qt-app/` | **KDE Theme Manager** — native Qt/QML + Kirigami desktop app with profile cards, wallpaper picker, settings, system tray, and two interchangeable cores (Rust / CLI) |
 
 Run from the source tree during development:
 
 ```bash
 cd gui/qt-app
 uv venv && uv pip install -e ".[dev]"
-uv run kde-theme-manager  # or: python -m src (Rust when built, otherwise Bash)
-uv run kde-theme-manager --core bash   # force the bash adapter
+uv run kde-theme-manager  # or: python -m src (Rust when built, otherwise the CLI core)
+uv run kde-theme-manager --core cli     # shell out to the Rust CLI binary
 ```
 
 For normal use install it once — see below.
@@ -118,13 +118,13 @@ distro); with a system PySide6 the copy stays ~650 KB.
 
 ### GUI cores / Ядра GUI
 
-The app runs on either of two interchangeable cores — the Bash core (delegating
-to the bash scripts) and the Rust core (`libkde_theme_core.so`). Rust is the
-default. Choose one:
+The app runs on either of two interchangeable cores — the CLI core (shelling out
+to the Rust `theme-profile` binaries) and the Rust core (`libkde_theme_core.so`).
+Rust is the default. Choose one:
 
 ```bash
-kde-theme-manager --core rust      # rust | bash | auto (default; auto = rust if built)
-kde-theme-manager --core bash      # fall back to the bash scripts
+kde-theme-manager --core rust      # rust | cli | auto (default; auto = rust if built)
+kde-theme-manager --core cli       # fall back to the CLI (shells to theme-profile)
 kde-theme-manager --list-cores     # show what is available and where
 KTM_CORE=rust kde-theme-manager    # per-run override
 # Settings → Core switches it for the next start
@@ -133,7 +133,7 @@ KTM_CORE=rust kde-theme-manager    # per-run override
 The installer ships the library as
 `~/.local/share/kde-theme-manager/lib/libkde_theme_core.so` when it is built
 (`--with-rust` builds it on demand, `--no-rust` skips it). Without the library
-the app uses the Bash core, so the GUI always starts.
+the app uses the CLI core, so the GUI always starts.
 
 ## Usage / Использование
 
@@ -270,13 +270,13 @@ See [`docs/ROLLBACK.md`](docs/ROLLBACK.md) for full instructions. Quick summary:
 
 ## Editing Rule / Правило редактирования
 
-1. Edit files in `~/theme-profile-kit/files/bin/` first.
-2. Re-run `install-theme-profile-kit.sh` to deploy.
+1. Edit `~/theme-profile-kit/gui/qt-app/src/core/rust_core/**` first.
+2. Re-run `scripts/install-theme-profile-kit.sh` (it builds the Rust CLI with cargo).
 3. Do **not** edit `~/.local/bin/` directly — copy changes back into the kit immediately.
 
 ## Hardening / Безопасность
 
-- **Profile names** are validated (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`) in bash,
+- **Profile names** are validated (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`) in Rust,
   Python and Rust before touching the filesystem; `..`, separators and shell
   metacharacters are rejected, and `diff` cannot traverse outside `profiles/`.
 - **Custom component lists** are validated against the known component set; an
