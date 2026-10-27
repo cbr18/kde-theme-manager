@@ -1,7 +1,7 @@
 """
 Core Protocol (Abstract Base Classes) — КОНТРАКТ между UI и Core.
 
-Этот модуль НЕ МЕНЯЕТСЯ при замене PythonCore на RustCore.
+Этот модуль НЕ МЕНЯЕТСЯ при замене BashCore на RustCore.
 UI и Controllers зависят только от этих абстракций.
 """
 
@@ -352,9 +352,19 @@ class AppSettings:
     create_backup_before_apply: bool = True
     notify_on_success: bool = True
 
-    # Какое ядро использовать при старте: "python" | "rust"
-    # (переопределяется флагом --core и переменной окружения KTM_CORE)
-    core_backend: str = "python"
+    # Какое ядро использовать при старте: "rust" | "bash" | "auto"
+    # (переопределяется флагом --core и переменной окружения KTM_CORE).
+    # "python" — устаревший псевдоним bash: старые настройки продолжают работать.
+    core_backend: str = "rust"
+
+    def __post_init__(self) -> None:
+        backend = str(self.core_backend or "rust").strip().lower()
+        if backend == "python":
+            backend = "bash"
+        if backend not in ("rust", "bash", "auto"):
+            backend = "rust"
+        if backend != self.core_backend:
+            object.__setattr__(self, "core_backend", backend)
 
     def to_dict(self) -> dict:
         return {
@@ -388,7 +398,7 @@ class AppSettings:
             confirm_before_apply=data.get("confirm_before_apply", True),
             create_backup_before_apply=data.get("create_backup_before_apply", True),
             notify_on_success=data.get("notify_on_success", True),
-            core_backend=data.get("core_backend", "python"),
+            core_backend=data.get("core_backend", "rust"),
         )
 
 
@@ -399,14 +409,16 @@ class AppSettings:
 class CoreFactory:
     """
     Фабрика для получения реализаций Core протоколов.
-    Позволяет подменять реализацию (PythonCore → RustCore) в одной точке.
+    Позволяет подменять реализацию (BashCore → RustCore) в одной точке.
 
     Ядро выбирается флагом ``--core`` / переменной ``KTM_CORE`` / настройкой
     ``core_backend``; см. :meth:`set_backend`.
     """
 
-    #: Доступные бэкенды. "auto" — rust, если библиотека есть, иначе python.
-    BACKENDS = ("python", "rust", "auto")
+    #: Доступные бэкенды. "auto" — rust, если библиотека есть, иначе bash.
+    BACKENDS = ("rust", "bash", "auto")
+    #: Устаревшее имя бэкенда; сохранённые настройки и старые скрипты.
+    LEGACY_ALIASES = {"python": "bash"}
     #: Переменная окружения, переопределяющая настройку (но не флаг --core).
     ENV_VAR = "KTM_CORE"
 
@@ -416,7 +428,9 @@ class CoreFactory:
     _settings_core: Optional[SettingsCore] = None
     _theme_core: Optional["ThemeCore"] = None
 
-    _backend: str = "python"          # фактически используемый
+    # Пока ``_select_core`` не выбран явно, безопасный локальный бэкенд —
+    # bash. Приложение при старте выбирает rust по умолчанию (см. __main__).
+    _backend: str = "bash"
 
     # ── Выбор ядра ─────────────────────────────────────────────
 
@@ -424,6 +438,7 @@ class CoreFactory:
     def normalize_backend(cls, backend: str) -> str:
         """Проверить и нормализовать имя бэкенда."""
         name = (backend or "").strip().lower()
+        name = cls.LEGACY_ALIASES.get(name, name)
         if name not in cls.BACKENDS:
             raise ValueError(
                 f"Unknown core backend {backend!r}; expected one of "
@@ -436,13 +451,13 @@ class CoreFactory:
         """Выбрать ядро и сбросить кэш реализаций.
 
         ``strict=False`` — «мягкий» режим: если Rust-библиотека недоступна,
-        используется Python-ядро (с предупреждением в stderr). Возвращает
+        используется Bash-ядро (с предупреждением в stderr). Возвращает
         фактически используемый бэкенд.
         """
         name = cls.normalize_backend(backend)
 
         if name == "auto":
-            name = "rust" if cls.rust_available() else "python"
+            name = "rust" if cls.rust_available() else "bash"
 
         if name == "rust" and not cls.rust_available():
             if strict:
@@ -455,17 +470,17 @@ class CoreFactory:
                     f"Searched: {searched}"
                 )
             print(
-                "Warning: Rust core unavailable, falling back to the Python core",
+                "Warning: Rust core unavailable, falling back to the Bash core",
                 file=sys.stderr,
             )
-            name = "python"
+            name = "bash"
 
         cls._backend = name
         cls.reset()
         return cls._backend
 
     @classmethod
-    def set_backend_from_env(cls, strict: bool = True, default: str = "python") -> str:
+    def set_backend_from_env(cls, strict: bool = True, default: str = "rust") -> str:
         """Выбрать ядро из ``KTM_CORE`` (если задана), иначе ``default``."""
         requested = os.environ.get(cls.ENV_VAR, "").strip() or default
         return cls.set_backend(requested, strict=strict)
@@ -479,7 +494,7 @@ class CoreFactory:
     def backend_label(cls) -> str:
         """Человекочитаемое имя ядра для UI."""
         if cls._backend != "rust":
-            return "Python"
+            return "Bash"
         from .rust_core import library_path
 
         path = library_path()
@@ -501,9 +516,9 @@ class CoreFactory:
             from .rust_core import RUST_FACTORIES
 
             return RUST_FACTORIES[kind]()
-        from .python_core import PYTHON_FACTORIES
+        from .bash_core import BASH_FACTORIES
 
-        return PYTHON_FACTORIES[kind]()
+        return BASH_FACTORIES[kind]()
 
     # ── Ручная подмена (тесты) ─────────────────────────────────
 
@@ -551,14 +566,15 @@ class CoreFactory:
     def theme_core(cls) -> "ThemeCore":
         """Инспектор темы.
 
-        Всегда Python-реализация: это чтение/запись конфигов и D-Bus-хуки,
-        где Rust не даёт выигрыша. Контракт отдельный от ``--core`` и
-        задокументирован в TZ; при стабилизации схемы можно добавить FFI.
+        Не является выбираемым бэкендом ``--core``: это отдельный Python-
+        модуль приложения (чтение/запись конфигов и D-Bus-хуки), где Rust
+        сейчас не даёт выигрыша. Контракт задокументирован в TZ; при
+        стабилизации схемы можно добавить FFI.
         """
         if cls._theme_core is None:
-            from .theme_core import PythonThemeCore
+            from .theme_core import AppThemeCore
 
-            cls._theme_core = PythonThemeCore()
+            cls._theme_core = AppThemeCore()
         return cls._theme_core
 
     @classmethod

@@ -161,7 +161,7 @@ pub fn prev_wallpaper() -> Result<()> {
 ///
 /// Plasma keeps the desktop wallpaper per containment in the appletsrc; it is
 /// the authoritative answer to "what is on the desktop". Mirrors
-/// PythonWallpaperCore._plasma_wallpaper(): the *last* `Image=` inside a
+/// BashWallpaperCore._plasma_wallpaper(): the *last* `Image=` inside a
 /// `[Containments][N][Wallpaper][org.kde.image][General]` group wins.
 fn plasma_wallpaper() -> Option<String> {
     let config = dirs::config_dir()?
@@ -219,7 +219,7 @@ fn percent_decode(input: &str) -> String {
 
 /// Get current wallpaper
 ///
-/// Plasma first (self-healing, like the Python core), cached index only as a
+/// Plasma first (self-healing, like the Bash core), cached index only as a
 /// fallback: the index is a position in the list and silently points at a
 /// different file once the enumeration order changes.
 pub fn current_wallpaper() -> Result<String> {
@@ -246,7 +246,7 @@ pub fn current_wallpaper() -> Result<String> {
 /// List all wallpapers
 ///
 /// The order and the accepted extensions must match the bash scripts
-/// (files/bin/wallpaper-{picker,next,prev}) and the Python core: the cached
+/// (files/bin/wallpaper-{picker,next,prev}) and the Bash core: the cached
 /// index is a position in this list. `is_file()` follows symlinks (like
 /// `find -L`), extensions are compared case-insensitively (like
 /// `find -iname`), and `sort()` on String is byte order (like `LC_ALL=C sort`).

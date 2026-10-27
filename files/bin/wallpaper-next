@@ -10,7 +10,7 @@ PLASMA_CONFIG="${PLASMA_APPLETSRC:-$CONFIG_HOME/plasma-org.kde.plasma.desktop-ap
 
 # ── The wallpaper list ───────────────────────────────────────────────────────
 # The index in $STATE is a *position* in this list, so every consumer (these
-# scripts, the Qt app's Python core and its Rust core) must enumerate the same
+# scripts, the Qt app's Bash core and its Rust core) must enumerate the same
 # files in the same order:
 #   * follow symlinks     -> find -L        / Path.is_file() / fs::is_file()
 #   * the same extensions -> jpg, jpeg, png, webp, bmp

@@ -10,8 +10,9 @@
 
 ### ✅ Готово
 - [x] Clean Architecture: `core/protocol.py` (ABC contracts)
-- [x] PythonCore: обёртки над bash (`theme-profile`, `wallpaper-*`)
-- [x] TrackedAppsCore: 19 приложений с авто-детектом
+- [x] BashCore: обёртки над bash (`theme-profile`, `wallpaper-*`); настройки и
+  реестр приложений — локально
+- [x] TrackedAppsCore: 20 приложений с авто-детектом
 - [x] Controllers: Profile, Wallpaper, TrackedApps, Settings, Main
 - [x] ThemeController: dogfooding (glass/paper/dark/light/system)
 - [x] QML UI: MainPage (профили + обои), SettingsPage (гранулярные чекбоксы)
@@ -86,24 +87,25 @@
 
 ---
 
-## v0.5.0 — Rust Core (Performance & Single Binary)
+## v0.5.0 — Rust Core polish & Single Binary
 
-> **Статус: Phase 1–2 сделаны** (выбор ядра флагом, паритет с Python покрыт
+> **Статус: Phase 1–2 сделаны** (выбор ядра флагом, паритет с Bash покрыт
 > тестами). Файлы Rust-крейта: `src/core/rust_core/src/{lib,ffi,types,profile,
 > wallpaper,tracked_apps,settings,config_parser}.rs`; Python-биндинг —
 > `src/core/rust_core.py`. Мутирующие операции профилей (`apply`/`save`/`diff`)
 > делегируются bash-скрипту `theme-profile` — он владеет картой
 > «компонент → конфиг» и бэкапами; нативное переписывание один раз уже
 > скопировало `kwinrc` в `~/kwin` и перезапускало plasmashell на каждый apply.
-> Переключение: `--core python|rust|auto`, `$KTM_CORE`, *Settings → Core*;
-> без собранной библиотеки приложение работает на Python-ядре.
+> Переключение: `--core rust|bash|auto`, `$KTM_CORE`, *Settings → Core*;
+> Rust — по умолчанию, без собранной библиотеки приложение работает на
+> Bash-ядре.
 
 ### Архитектура
 ```
 src/
 ├── core/
 │   ├── protocol.py       # ABC (остаётся)
-│   ├── python_core.py    # Deprecated
+│   ├── bash_core.py      # Bash adapter (theme-profile / wallpaper-*)
 │   └── rust_core/        # Новый Rust crate
 │       ├── Cargo.toml
 │       ├── src/
@@ -151,7 +153,7 @@ src/
 #### Phase 2: Python Bindings (cffi / pyo3)
 - [ ] Вариант A: `cffi` — загрузка `.so` через `ctypes`/`cffi`, сохраняем Python controllers
 - [ ] Вариант B: `pyo3` — нативный Python модуль, быстрее, но сложнее сборка
-- [ ] Обновить `CoreFactory` для выбора `RustCore` vs `PythonCore`
+- [x] Обновить `CoreFactory` для выбора `RustCore` vs `BashCore`
 
 #### Phase 3: Standalone Binary
 - [ ] `cargo build --release --bin kde-theme-manager`
@@ -229,8 +231,8 @@ plasma-applet/
 |--------|---------|-------|-----------|
 | v0.2.x | Python 3.11+, PySide6, uv | pip/uv | GitHub Releases |
 | v0.3.0 | + KNotification | | |
-| v0.4.0 | Python 3.11+, PySide6, Rust 1.75+ (optional) | uv, cargo | GitHub Releases |
-| v0.5.0 | Rust core as default, single binary | cargo + pip | Single binary |
+| v0.4.0 | Python 3.11+, PySide6, Rust 1.75+ (default) | uv, cargo | GitHub Releases |
+| v0.5.0 | Rust polish, single binary | cargo + pip | Single binary |
 | v1.0.0 | C++17, Qt6, KDE Frameworks 6 | CMake, ECM | AUR, Flatpak, KDE Store |
 
 ---

@@ -197,7 +197,7 @@ ThemeField(
 
 - [x] `ThemeCore` ABC в `protocol.py`:
   `sections()`, `fields(section)`, `get(field_id, scope)`, `choices(field_id)`, `validate()`, `set_value()`, `reset()`, `undo()`, `revert()`, `session_changes()`.
-- [x] `CoreFactory.theme_core()` → Python-реализация (не зависит от `--core`; отмечено в докстринге и §3a).
+- [x] `CoreFactory.theme_core()` → Python-реализация (не выбираемое ядро, не зависит от `--core`; отмечено в докстринге и §3a).
 - [x] `ThemeInspectorController` (QObject, context property `themeInspector`): `sections`, `issues`, `scope`, `scopes`, `readOnly`, `busy`, `sessionChanges`, `accentColor`, `modifiedCount`; сигналы `sectionsChanged`, `fieldsChanged`, `issuesChanged`, `scopeChanged`, `busyChanged`, `toast(text, ok)`.
 - [x] Регистрация в `register_controllers(engine)`; Python-ссылка живёт в `MainController._theme`.
 - [x] Async-обёртки: записи/undo/revert идут через `QThreadPool`, GUI не блокируется.

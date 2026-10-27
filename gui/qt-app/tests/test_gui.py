@@ -4,7 +4,7 @@ Test suite for KDE Theme Manager — QA audit.
 Tests cover:
   1. py_compile validation of all Python source files.
   2. Import checks for modules that don't require a display.
-  3. Mock / unit tests for PythonCore classes (Profile, Wallpaper, Settings).
+  3. Mock / unit tests for BashCore classes (Profile, Wallpaper, Settings).
   4. Protocol / dataclass integrity checks.
   5. Tracked-apps registry structural validation.
 """
@@ -82,13 +82,13 @@ def test_import_tracked_apps() -> None:
     detect_all_apps()  # must not raise
 
 
-def test_import_python_core() -> None:
-    """Python core implementations must import cleanly."""
-    from core.python_core import (
-        PythonProfileCore,
-        PythonSettingsCore,
-        PythonTrackedAppsCore,
-        PythonWallpaperCore,
+def test_import_bash_core() -> None:
+    """Bash core implementations must import cleanly."""
+    from core.bash_core import (
+        BashProfileCore,
+        BashSettingsCore,
+        BashTrackedAppsCore,
+        BashWallpaperCore,
     )
     from core.protocol import Result
     # Smoke-check Result constructors
@@ -170,15 +170,15 @@ def test_core_factory_reset_and_recreate() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. PythonProfileCore — mocked subprocess
+# 5. BashProfileCore — mocked subprocess
 # ─────────────────────────────────────────────────────────────────────────────
-class TestPythonProfileCore:
-    """Unit tests for PythonProfileCore with mocked subprocess."""
+class TestBashProfileCore:
+    """Unit tests for BashProfileCore with mocked subprocess."""
 
     def _make_core(self) -> "object":
-        from core.python_core import PythonProfileCore
+        from core.bash_core import BashProfileCore
 
-        return PythonProfileCore()
+        return BashProfileCore()
 
     def test_list_profiles_empty(self) -> None:
         core = self._make_core()
@@ -259,38 +259,38 @@ class TestPythonProfileCore:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. PythonSettingsCore — file-based I/O
+# 6. BashSettingsCore — file-based I/O
 # ─────────────────────────────────────────────────────────────────────────────
-class TestPythonSettingsCore:
-    """Unit tests for PythonSettingsCore with temp directory."""
+class TestBashSettingsCore:
+    """Unit tests for BashSettingsCore with temp directory."""
 
     def test_defaults(self) -> None:
-        from core.python_core import PythonSettingsCore
+        from core.bash_core import BashSettingsCore
 
-        core = PythonSettingsCore()
+        core = BashSettingsCore()
         settings = core.get_defaults()
         assert settings.theme == "system"
         assert settings.default_components_mode == "all"
         assert settings.custom_components == ()
 
     def test_load_nonexistent_returns_defaults(self) -> None:
-        from core.python_core import PythonSettingsCore
+        from core.bash_core import BashSettingsCore
 
-        core = PythonSettingsCore()
+        core = BashSettingsCore()
         settings = core.load()
         assert settings.theme == "system"
 
     def test_save_and_load_roundtrip(self, tmp_path: Path) -> None:
-        from core.python_core import PythonSettingsCore
+        from core.bash_core import BashSettingsCore
         from core.protocol import AppSettings
 
-        core = PythonSettingsCore()
+        core = BashSettingsCore()
         custom = AppSettings(
             theme="glass",
             default_components_mode="custom",
             custom_components=("kwin", "kdeglobals"),
         )
-        with mock.patch("core.python_core.SETTINGS_FILE", tmp_path / "settings.json"):
+        with mock.patch("core.bash_core.SETTINGS_FILE", tmp_path / "settings.json"):
             result = core.save(custom)
             assert result.success
 
@@ -303,44 +303,44 @@ class TestPythonSettingsCore:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7. PythonWallpaperCore — wallpaper dir uses settings
+# 7. BashWallpaperCore — wallpaper dir uses settings
 # ─────────────────────────────────────────────────────────────────────────────
-class TestPythonWallpaperCore:
+class TestBashWallpaperCore:
     """Test that wallpaper_dir resolves from settings, not hardcoded."""
 
     def test_wallpaper_dir_is_property(self) -> None:
         """wallpaper_dir is now a property, not a hardcoded attribute."""
-        from core.python_core import PythonWallpaperCore
+        from core.bash_core import BashWallpaperCore
 
-        core = PythonWallpaperCore()
+        core = BashWallpaperCore()
         # Should be accessible as a property (Path object)
         dir_path = core.wallpaper_dir
         assert isinstance(dir_path, Path)
 
     def test_wallpaper_dir_uses_settings(self) -> None:
         """wallpaper_dir should come from AppSettings.wallpaper_directory."""
-        from core.python_core import PythonWallpaperCore
+        from core.bash_core import BashWallpaperCore
 
-        core = PythonWallpaperCore()
+        core = BashWallpaperCore()
         # The property should resolve to the default wallpaper directory
         # (since no settings file exists in CI, it falls back to default)
         assert core.wallpaper_dir is not None
 
     def test_list_wallpapers_nonexistent_dir(self) -> None:
         """list_wallpapers returns [] when dir doesn't exist."""
-        from core.python_core import PythonWallpaperCore
+        from core.bash_core import BashWallpaperCore
 
-        core = PythonWallpaperCore()
+        core = BashWallpaperCore()
         with mock.patch.object(type(core), "wallpaper_dir", Path("/nonexistent/dir/12345")):
             assert core.list_wallpapers() == []
 
     def test_resolve_wallpaper_dir_from_settings(self) -> None:
         """_resolve_wallpaper_dir should use CoreFactory settings."""
-        from core.python_core import PythonWallpaperCore
+        from core.bash_core import BashWallpaperCore
 
-        core = PythonWallpaperCore()
+        core = BashWallpaperCore()
         core._wallpaper_dir = None  # Reset
-        with mock.patch("core.python_core.CoreFactory") as mock_factory:
+        with mock.patch("core.bash_core.CoreFactory") as mock_factory:
             mock_settings = mock.Mock()
             mock_settings.wallpaper_directory = "/tmp/test-wallpapers"
             mock_factory.settings_core.return_value.load.return_value = mock_settings
@@ -379,9 +379,9 @@ class TestWallpaperOrdering:
     """Ordering/selection rules that the bash scripts and the GUI must share."""
 
     def _core(self, directory: Path):
-        from core.python_core import PythonWallpaperCore
+        from core.bash_core import BashWallpaperCore
 
-        core = PythonWallpaperCore()
+        core = BashWallpaperCore()
         core._wallpaper_dir = directory
         return core
 
@@ -433,7 +433,7 @@ class TestWallpaperOrdering:
 
     def test_current_reads_plasma_config(self, tmp_path: Path, monkeypatch) -> None:
         """current() must report the wallpaper Plasma actually shows."""
-        from core.python_core import PythonWallpaperCore
+        from core.bash_core import BashWallpaperCore
 
         d = _make_wallpaper_dir(tmp_path)
         real = d / "Zebra.png"
@@ -446,7 +446,7 @@ class TestWallpaperOrdering:
             "[Containments][282][Wallpaper][org.kde.slideshow][General]\n"
             "Image=file:///elsewhere/slide.png\n"
         )
-        monkeypatch.setattr(PythonWallpaperCore, "PLASMA_CONFIG", config)
+        monkeypatch.setattr(BashWallpaperCore, "PLASMA_CONFIG", config)
 
         core = self._core(d)
         core.cache_index = tmp_path / "state"
@@ -455,14 +455,14 @@ class TestWallpaperOrdering:
         assert core.current() == str(real)
 
     def test_current_decodes_url_escapes(self, tmp_path: Path, monkeypatch) -> None:
-        from core.python_core import PythonWallpaperCore
+        from core.bash_core import BashWallpaperCore
 
         config = tmp_path / "appletsrc"
         config.write_text(
             "[Containments][281][Wallpaper][org.kde.image][General]\n"
             "Image=file:///home/u/My%20Pictures/wall%20one.png\n"
         )
-        monkeypatch.setattr(PythonWallpaperCore, "PLASMA_CONFIG", config)
+        monkeypatch.setattr(BashWallpaperCore, "PLASMA_CONFIG", config)
 
         core = self._core(tmp_path)
         assert core.current() == "/home/u/My Pictures/wall one.png"
@@ -470,11 +470,11 @@ class TestWallpaperOrdering:
     def test_current_falls_back_to_cached_index(
         self, tmp_path: Path, monkeypatch
     ) -> None:
-        from core.python_core import PythonWallpaperCore
+        from core.bash_core import BashWallpaperCore
 
         d = _make_wallpaper_dir(tmp_path)
         monkeypatch.setattr(
-            PythonWallpaperCore, "PLASMA_CONFIG", tmp_path / "missing-appletsrc"
+            BashWallpaperCore, "PLASMA_CONFIG", tmp_path / "missing-appletsrc"
         )
 
         core = self._core(d)
@@ -509,9 +509,9 @@ def test_tracked_apps_have_required_fields() -> None:
 
 def test_tracked_apps_categories() -> None:
     """Categories should include expected KDE/Plasma categories."""
-    from core.tracked_apps import PythonTrackedAppsCore
+    from core.tracked_apps import BashTrackedAppsCore
 
-    core = PythonTrackedAppsCore()
+    core = BashTrackedAppsCore()
     categories = core.get_categories()
     expected = {"KDE / Plasma", "GTK / Qt", "Window Decorations", "Terminals",
                 "Editors", "Browser"}
@@ -882,17 +882,17 @@ def test_theme_controller_applies_palette() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 23. Python core uses shutil.which for binary path resolution
+# 23. Bash core uses shutil.which for binary path resolution
 # ─────────────────────────────────────────────────────────────────────────────
-def test_python_core_binary_resolution() -> None:
-    """python_core.py must use shutil.which with ~/.local/bin fallback for theme-profile."""
-    core_path = SRC_DIR / "core" / "python_core.py"
+def test_bash_core_binary_resolution() -> None:
+    """bash_core.py must use shutil.which with ~/.local/bin fallback for theme-profile."""
+    core_path = SRC_DIR / "core" / "bash_core.py"
     content = core_path.read_text()
     assert "import shutil" in content, (
-        "python_core.py must import shutil for PATH resolution"
+        "bash_core.py must import shutil for PATH resolution"
     )
     assert shutil_path_in_init(content), (
-        "PythonProfileCore.__init__ must use shutil.which with ~/.local/bin fallback"
+        "BashProfileCore.__init__ must use shutil.which with ~/.local/bin fallback"
     )
 
 
@@ -1371,7 +1371,7 @@ def test_icon_name_survives_kde_icon_loader() -> None:
 # The Rust core is an optional drop-in: a shared library behind a C ABI of
 # `*mut c_char` JSON payloads (freed with kde_theme_core_free_string) and
 # c_int status codes. Without the library everything must degrade to the
-# Python core instead of crashing.
+# Bash core instead of crashing.
 # ─────────────────────────────────────────────────────────────────────────────
 RUST_LIB = (
     PROJECT_ROOT / "src" / "core" / "rust_core" / "target" / "release"
@@ -1384,14 +1384,14 @@ needs_rust_lib = pytest.mark.skipif(
 
 @pytest.fixture
 def core_factory():
-    """Keep CoreFactory on the Python backend around a test."""
+    """Keep CoreFactory on the Bash backend around a test."""
     from core.protocol import CoreFactory
 
-    CoreFactory.set_backend("python")
+    CoreFactory.set_backend("bash")
     try:
         yield CoreFactory
     finally:
-        CoreFactory.set_backend("python")
+        CoreFactory.set_backend("bash")
 
 
 def test_rust_core_library_candidates_cover_both_layouts(monkeypatch) -> None:
@@ -1498,11 +1498,11 @@ def test_rust_core_status_calls_map_errors_to_result(core_factory) -> None:
 class TestCoreParity:
     @staticmethod
     def cores():
-        from core.python_core import (
-            PythonProfileCore,
-            PythonSettingsCore,
-            PythonTrackedAppsCore,
-            PythonWallpaperCore,
+        from core.bash_core import (
+            BashProfileCore,
+            BashSettingsCore,
+            BashTrackedAppsCore,
+            BashWallpaperCore,
         )
         from core.rust_core import (
             RustProfileCore,
@@ -1512,10 +1512,10 @@ class TestCoreParity:
         )
 
         return (
-            (PythonProfileCore(), RustProfileCore()),
-            (PythonWallpaperCore(), RustWallpaperCore()),
-            (PythonTrackedAppsCore(), RustTrackedAppsCore()),
-            (PythonSettingsCore(), RustSettingsCore()),
+            (BashProfileCore(), RustProfileCore()),
+            (BashWallpaperCore(), RustWallpaperCore()),
+            (BashTrackedAppsCore(), RustTrackedAppsCore()),
+            (BashSettingsCore(), RustSettingsCore()),
         )
 
     def test_profiles(self, core_factory) -> None:
@@ -1581,11 +1581,11 @@ class TestCoreParity:
 
         core_factory.set_settings_core(FakeSettings())
 
-        from core.python_core import PythonWallpaperCore
+        from core.bash_core import BashWallpaperCore
         from core.rust_core import RustWallpaperCore
 
         rust_listed = RustWallpaperCore().list_wallpapers()
-        assert rust_listed == PythonWallpaperCore().list_wallpapers()
+        assert rust_listed == BashWallpaperCore().list_wallpapers()
         assert [Path(p).name for p in rust_listed] == ["0-link.webp", "B.PNG", "a.jpg"]
 
     def test_tracked_apps(self, core_factory) -> None:
@@ -1629,7 +1629,7 @@ class TestCoreParity:
         assert loaded.core_backend == "rust"
         assert loaded.theme == "paper"
         assert loaded.to_dict() == saved.to_dict()
-        # …and the file must stay readable by the Python core.
+        # …and the file must stay readable by the Bash core.
         assert AppSettings.from_dict(json.loads(written.read_text())).to_dict() == saved.to_dict()
 
     def test_mutating_profile_operations_go_through_the_script(self, core_factory) -> None:
@@ -1658,9 +1658,9 @@ def test_core_factory_auto_prefers_rust_when_built(core_factory, monkeypatch) ->
     assert core_factory.set_backend("auto") == "rust"
 
 
-def test_core_factory_auto_falls_back_to_python(core_factory, monkeypatch) -> None:
+def test_core_factory_auto_falls_back_to_bash(core_factory, monkeypatch) -> None:
     monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: False))
-    assert core_factory.set_backend("auto") == "python"
+    assert core_factory.set_backend("auto") == "bash"
 
 
 def test_core_factory_strict_rust_failure_is_loud(core_factory, monkeypatch) -> None:
@@ -1674,16 +1674,23 @@ def test_core_factory_strict_rust_failure_is_loud(core_factory, monkeypatch) -> 
 def test_core_factory_soft_fallback_warns(core_factory, monkeypatch, capsys) -> None:
     monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: False))
 
-    assert core_factory.set_backend("rust", strict=False) == "python"
-    assert "falling back" in capsys.readouterr().err
+    assert core_factory.set_backend("rust", strict=False) == "bash"
+    err = capsys.readouterr().err
+    assert "falling back" in err
+    assert "Bash core" in err
+
+
+def test_core_factory_accepts_legacy_python_alias(core_factory) -> None:
+    assert core_factory.set_backend("python") == "bash"
+    assert core_factory.backend_label() == "Bash"
 
 
 def test_core_factory_reads_the_environment(core_factory, monkeypatch) -> None:
-    monkeypatch.setenv(core_factory.ENV_VAR, "python")
-    assert core_factory.set_backend_from_env() == "python"
+    monkeypatch.setenv(core_factory.ENV_VAR, "bash")
+    assert core_factory.set_backend_from_env() == "bash"
 
     monkeypatch.delenv(core_factory.ENV_VAR)
-    assert core_factory.set_backend_from_env(default="python") == "python"
+    assert core_factory.set_backend_from_env(default="bash") == "bash"
 
 
 @needs_rust_lib
@@ -1697,12 +1704,12 @@ def test_core_factory_builds_rust_implementations(core_factory) -> None:
     assert isinstance(core_factory.settings_core(), rust_core.RustSettingsCore)
     assert "libkde_theme_core.so" in core_factory.backend_label()
 
-    # Switching back must rebuild the Python implementations.
-    assert core_factory.set_backend("python") == "python"
-    from core.python_core import PythonProfileCore
+    # Switching back must rebuild the Bash implementations.
+    assert core_factory.set_backend("bash") == "bash"
+    from core.bash_core import BashProfileCore
 
-    assert isinstance(core_factory.profile_core(), PythonProfileCore)
-    assert core_factory.backend_label() == "Python"
+    assert isinstance(core_factory.profile_core(), BashProfileCore)
+    assert core_factory.backend_label() == "Bash"
 
 
 def test_settings_expose_the_core_selector() -> None:
@@ -1716,13 +1723,15 @@ def test_settings_expose_the_core_selector() -> None:
 
     qml = (PROJECT_ROOT / "qml" / "pages" / "SettingsPage.qml").read_text()
     assert 'settingsController.coreBackend' in qml
-    assert 'model: ["python", "rust", "auto"]' in qml
+    assert 'model: ["rust", "bash", "auto"]' in qml
 
     defaults = AppSettings()
-    assert defaults.core_backend == "python"
-    assert AppSettings.from_dict({}).core_backend == "python"
+    assert defaults.core_backend == "rust"
+    assert AppSettings.from_dict({}).core_backend == "rust"
     assert AppSettings.from_dict({"core_backend": "rust"}).core_backend == "rust"
-    assert defaults.to_dict()["core_backend"] == "python"
+    assert AppSettings.from_dict({"core_backend": "bash"}).core_backend == "bash"
+    assert AppSettings.from_dict({"core_backend": "python"}).core_backend == "bash"
+    assert defaults.to_dict()["core_backend"] == "rust"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1744,6 +1753,7 @@ def _load_main_module():
         (["--core=rust"], "rust", []),
         (["--core", "rust"], "rust", []),
         (["--core=auto", "--verbose"], "auto", ["--verbose"]),
+        (["--core", "bash", "file.qml"], "bash", ["file.qml"]),
         (["--core", "python", "file.qml"], "python", ["file.qml"]),
         ([], None, []),
     ],
@@ -1781,7 +1791,7 @@ def test_stale_saved_core_falls_back_instead_of_failing(core_factory, monkeypatc
     from core.protocol import AppSettings
 
     main_module = _load_main_module()
-    import core.python_core as python_core
+    import core.bash_core as bash_core
 
     monkeypatch.setattr(core_factory, "rust_available", classmethod(lambda cls: False))
     monkeypatch.delenv(core_factory.ENV_VAR, raising=False)
@@ -1798,11 +1808,11 @@ def test_stale_saved_core_falls_back_instead_of_failing(core_factory, monkeypatc
 
             return Result.ok()
 
-    monkeypatch.setattr(python_core, "PythonSettingsCore", FakeSettingsCore)
+    monkeypatch.setattr(bash_core, "BashSettingsCore", FakeSettingsCore)
 
     main_module._select_core(None)
 
-    assert core_factory.backend() == "python"
+    assert core_factory.backend() == "bash"
     assert "falling back" in capsys.readouterr().err
     assert saved == [], "a fallback must not overwrite the saved preference"
 
@@ -1811,14 +1821,14 @@ def test_explicit_core_is_persisted(core_factory, monkeypatch) -> None:
     from core.protocol import AppSettings
 
     main_module = _load_main_module()
-    import core.python_core as python_core
+    import core.bash_core as bash_core
 
     monkeypatch.delenv(core_factory.ENV_VAR, raising=False)
     saved: list[AppSettings] = []
 
     class FakeSettingsCore:
         def load(self):
-            # Saved as "rust"; the flag asks for python → the preference flips.
+            # Saved as "rust"; the flag asks for bash → the preference flips.
             return AppSettings(**{**AppSettings().to_dict(), "core_backend": "rust"})
 
         def save(self, settings):
@@ -1827,11 +1837,11 @@ def test_explicit_core_is_persisted(core_factory, monkeypatch) -> None:
 
             return Result.ok()
 
-    monkeypatch.setattr(python_core, "PythonSettingsCore", FakeSettingsCore)
+    monkeypatch.setattr(bash_core, "BashSettingsCore", FakeSettingsCore)
 
-    main_module._select_core("python")
+    main_module._select_core("bash")
 
-    assert [s.core_backend for s in saved] == ["python"]
+    assert [s.core_backend for s in saved] == ["bash"]
 
 
 def test_list_cores_reports_availability(capsys) -> None:
@@ -1839,7 +1849,7 @@ def test_list_cores_reports_availability(capsys) -> None:
     assert main_module._list_cores() == 0
 
     out = capsys.readouterr().out
-    assert "python" in out and "rust" in out
+    assert "bash" in out and "rust" in out
     assert ("available" in out) or ("NOT AVAILABLE" in out)
 
 

@@ -1,4 +1,4 @@
-"""Path and profile-name helpers shared by the Python core.
+"""Path and profile-name helpers shared by the Bash core.
 
 The application supports the XDG base directories, but existing installations
 created before XDG support keep their data in ``~/.config/theme-profile``.  The

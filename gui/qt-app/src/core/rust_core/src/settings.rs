@@ -45,15 +45,28 @@ pub fn load_settings() -> Result<AppSettings> {
     let file = settings_file();
     if file.exists() {
         let content = fs::read_to_string(&file)?;
-        let settings: AppSettings = serde_json::from_str(&content)?;
+        let mut settings: AppSettings = serde_json::from_str(&content)?;
+        normalize_core_backend(&mut settings);
         Ok(settings)
     } else {
         Ok(get_defaults())
     }
 }
 
+/// Keep the saved core name in the vocabulary the launcher understands.
+/// "python" is the legacy alias for the bash adapter; unknown values fall
+/// back to the default (Rust) instead of making the app unstartable.
+fn normalize_core_backend(settings: &mut AppSettings) {
+    match settings.core_backend.as_str() {
+        "python" => settings.core_backend = "bash".to_string(),
+        "rust" | "bash" | "auto" => {}
+        _ => settings.core_backend = "rust".to_string(),
+    }
+}
+
 /// Save settings atomically without widening permissions.
-pub fn save_settings(settings: AppSettings) -> Result<()> {
+pub fn save_settings(mut settings: AppSettings) -> Result<()> {
+    normalize_core_backend(&mut settings);
     let file = settings_file();
     if let Some(parent) = file.parent() {
         let mut builder = DirBuilder::new();

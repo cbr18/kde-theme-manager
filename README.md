@@ -43,15 +43,15 @@
 
 | Component | Purpose |
 |-----------|---------|
-| `gui/qt-app/` | **KDE Theme Manager** — native Qt/QML + Kirigami desktop app with profile cards, wallpaper picker, settings, system tray, and two interchangeable cores (Python / Rust) |
+| `gui/qt-app/` | **KDE Theme Manager** — native Qt/QML + Kirigami desktop app with profile cards, wallpaper picker, settings, system tray, and two interchangeable cores (Rust / Bash) |
 
 Run from the source tree during development:
 
 ```bash
 cd gui/qt-app
 uv venv && uv pip install -e ".[dev]"
-uv run kde-theme-manager  # or: python -m src
-uv run kde-theme-manager --core rust   # once `cargo build --release` has run
+uv run kde-theme-manager  # or: python -m src (Rust when built, otherwise Bash)
+uv run kde-theme-manager --core bash   # force the bash adapter
 ```
 
 For normal use install it once — see below.
@@ -118,11 +118,13 @@ distro); with a system PySide6 the copy stays ~650 KB.
 
 ### GUI cores / Ядра GUI
 
-The app runs on either of two interchangeable cores — the Python core (wrapping
-the bash scripts) and the Rust core (`libkde_theme_core.so`). Choose one:
+The app runs on either of two interchangeable cores — the Bash core (delegating
+to the bash scripts) and the Rust core (`libkde_theme_core.so`). Rust is the
+default. Choose one:
 
 ```bash
-kde-theme-manager --core rust      # python | rust | auto (auto = rust if built)
+kde-theme-manager --core rust      # rust | bash | auto (default; auto = rust if built)
+kde-theme-manager --core bash      # fall back to the bash scripts
 kde-theme-manager --list-cores     # show what is available and where
 KTM_CORE=rust kde-theme-manager    # per-run override
 # Settings → Core switches it for the next start
@@ -131,7 +133,7 @@ KTM_CORE=rust kde-theme-manager    # per-run override
 The installer ships the library as
 `~/.local/share/kde-theme-manager/lib/libkde_theme_core.so` when it is built
 (`--with-rust` builds it on demand, `--no-rust` skips it). Without the library
-the app uses the Python core, so the GUI always starts.
+the app uses the Bash core, so the GUI always starts.
 
 ## Usage / Использование
 
@@ -209,7 +211,8 @@ file touched in this session. Before the first write, originals are copied to
 Heavy components (Plasma theme, look-and-feel, icons) ask for confirmation
 because they can replace the wallpaper or panel layout. Profile scopes are
 read-only; deep settings stay in System Settings via `kcmshell6` links. The
-inspector always uses the Python core, even when the app runs with `--core rust`.
+inspector is a separate Python module (not one of the `--core` backends), even
+when the app runs with `--core rust`.
 
 Tests use a temporary `$HOME`; `KTM_THEME_NO_APPLY=1` suppresses external
 commands (D-Bus, `plasma-apply-*`, `kvantummanager`) for dry runs.

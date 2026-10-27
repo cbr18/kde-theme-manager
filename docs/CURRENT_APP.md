@@ -178,8 +178,9 @@ Qt/QML-приложение (`gui/qt-app/`) уже ставится устано
 профиль, применение — отдельной кнопкой **Apply** (с подтверждением, если так
 настроено), а клик по профилю в трее применяет сразу.
 
-Инспектор всегда работает на Python-ядре (`CoreFactory.theme_core()`),
-независимо от `--core`. Подробности: [THEME_INSPECTOR.md](THEME_INSPECTOR.md), ТЗ: [TZ-THEME-INSPECTOR.md](TZ-THEME-INSPECTOR.md).
+Инспектор — отдельный Python-модуль (`CoreFactory.theme_core()`), не одно из
+выбираемых ядер `--core`, поэтому он работает одинаково при `--core rust` и
+`--core bash`. Подробности: [THEME_INSPECTOR.md](THEME_INSPECTOR.md), ТЗ: [TZ-THEME-INSPECTOR.md](TZ-THEME-INSPECTOR.md).
 
 ---
 
@@ -194,7 +195,7 @@ Qt/QML-приложение (`gui/qt-app/`) уже ставится устано
 
 Ранее числившиеся ограничения закрыты: гранулярность (`--components`), детект
 приложений, превью/diff профилей, настраиваемая папка обоев, native Qt/QML UI,
-а также смена ядра (Python/Rust) через `--core`, `$KTM_CORE` и Settings.
+а также смена ядра (Rust/Bash) через `--core`, `$KTM_CORE` и Settings.
 
 ---
 
@@ -245,8 +246,9 @@ $XDG_CONFIG_HOME/theme-profile/        # по умолчанию ~/.config/theme
 - Детект установленных приложений — **сделано**
 - Dogfooding (приложение само темизируется) — **сделано**
 - Clean Architecture для замены Core на Rust — **сделано**: два взаимозаменяемых
-  ядра, выбор через `--core python|rust|auto`, `$KTM_CORE` или
-  *Settings → Core*; Rust-библиотека `libkde_theme_core.so` ставится в
-  `~/.local/share/kde-theme-manager/lib/`, при её отсутствии приложение
-  откатывается на Python-ядро. Паритет ядер проверяется
+  ядра, Rust (по умолчанию) и Bash, выбор через `--core rust|bash|auto`,
+  `$KTM_CORE` или *Settings → Core*; Rust-библиотека `libkde_theme_core.so`
+  ставится в `~/.local/share/kde-theme-manager/lib/`, при её отсутствии
+  приложение откатывается на Bash-ядро. `python` остаётся legacy-псевдонимом
+  `bash` для старых настроек. Паритет ядер проверяется
   `tests/test_gui.py::TestCoreParity`.

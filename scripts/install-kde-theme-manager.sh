@@ -49,17 +49,17 @@ Options:
   --with-venv   Always build .venv inside the installed app directory
   --no-venv     Never build a venv (requires the system PySide6)
   --with-rust   Build the Rust core even without a prebuilt library
-  --no-rust     Do not install the Rust core (the app uses the Python core)
+  --no-rust     Do not install the Rust core (the app uses the Bash core)
   -h, --help    Show this help message and exit.
 
 With neither --with-venv nor --no-venv a venv is created only when the system
 Python cannot `import PySide6` (e.g. pyside6 is not installed from the distro).
 With neither --with-rust nor --no-rust a prebuilt libkde_theme_core.so is
 installed, and cargo is used to build one when it is missing and available
-(the app falls back to the Python core otherwise).
+(the app falls back to the Bash core otherwise).
 
-The core is chosen at runtime: `kde-theme-manager --core python|rust|auto`,
-$KTM_CORE, or Settings → Core (applied on restart).
+The core is chosen at runtime: `kde-theme-manager --core rust|bash|auto`,
+$KTM_CORE, or Settings → Core (applied on restart). Rust is the default.
 
 Installed files:
   ~/.local/share/kde-theme-manager/              application (copy)
@@ -156,10 +156,10 @@ fi
 printf '%s\n' "installed by $KIT_DIR/scripts/install-kde-theme-manager.sh" > "$APPDIR/$MARKER"
 
 # ── Rust core (optional) ────────────────────────────────────────────────────
-# The GUI can run on either core: the Python one drives the bash scripts, the
+# The GUI can run on either core: the Bash one drives the bash scripts, the
 # Rust one is a shared library loaded from <appdir>/lib (see
 # src/core/rust_core.py → library_candidates()). Anything missing here is not
-# fatal — CoreFactory falls back to Python with a warning.
+# fatal — CoreFactory falls back to Bash with a warning.
 RUST_LIB_NAME="libkde_theme_core.so"
 RUST_LIB_SRC="$APP_SRC/src/core/rust_core/target/release/$RUST_LIB_NAME"
 RUST_LIB_DST="$APPDIR/lib/$RUST_LIB_NAME"
@@ -180,10 +180,10 @@ elif command -v cargo >/dev/null 2>&1; then
     [ -f "$RUST_LIB_SRC" ]; then
     install_rust_lib
   else
-    warn "Warning: the Rust core did not build — the app will use the Python core."
+    warn "Warning: the Rust core did not build — the app will use the Bash core."
   fi
 else
-  warn "Warning: no prebuilt Rust core and no cargo — the app will use the Python core."
+  warn "Warning: no prebuilt Rust core and no cargo — the app will use the Bash core."
 fi
 
 # ── Python environment ──────────────────────────────────────────────────────

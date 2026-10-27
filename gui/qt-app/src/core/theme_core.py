@@ -560,7 +560,7 @@ class _UndoEntry:
     old_bytes: Optional[bytes]
 
 
-class PythonThemeCore(ThemeCore):
+class AppThemeCore(ThemeCore):
     """Schema-driven theme inspector (Python)."""
 
     def __init__(self) -> None:
@@ -1394,4 +1394,4 @@ def _toml_value(field: FieldDef, value: Any) -> Any:
     return str(value)
 
 
-__all__ = ["PythonThemeCore"]
+__all__ = ["AppThemeCore"]

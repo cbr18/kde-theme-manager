@@ -135,7 +135,7 @@ pub fn get_profile_components(profile_name: &str) -> Result<Vec<String>> {
     Ok(components)
 }
 
-/// Get profile creation timestamp (manifest only, like the Python core)
+/// Get profile creation timestamp (manifest only, like the Bash core)
 fn get_profile_created_at(profile_path: &Path) -> Result<String> {
     let manifest = profile_path.join("manifest.txt");
     if manifest.exists() {

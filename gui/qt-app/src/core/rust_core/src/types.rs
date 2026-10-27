@@ -53,13 +53,13 @@ pub struct AppSettings {
     pub create_backup_before_apply: bool,
     pub notify_on_success: bool,
     /// Which core implementation the application should use at startup
-    /// ("python" | "rust"). Written by the GUI, read by the launcher.
+    /// ("rust" | "bash" | "auto"). Written by the GUI, read by the launcher.
     #[serde(default = "default_core_backend")]
     pub core_backend: String,
 }
 
 fn default_core_backend() -> String {
-    "python".to_string()
+    "rust".to_string()
 }
 
 impl Default for AppSettings {

@@ -1,8 +1,9 @@
 """
-Python Core Implementation — обёртки над существующими bash-скриптами.
+Bash Core Implementation — адаптер над существующими bash-скриптами.
 
-Использует subprocess для вызова theme-profile, wallpaper-picker/next/prev.
-Парсит выход, конфиги, кэш.
+Профильные операции и навигация по обоям вызывают ``theme-profile`` и
+``wallpaper-*``; настройки приложения и реестр отслеживаемых приложений
+реализованы локально, потому что отдельных bash-команд для них нет.
 """
 
 import json
@@ -29,14 +30,14 @@ from .protocol import (
     ProfileCore, WallpaperCore, TrackedAppsCore, SettingsCore,
     ProfileInfo, Result, AppSettings, Component, AppStatus, CoreFactory
 )
-from .tracked_apps import PythonTrackedAppsCore, detect_all_apps, TRACKED_APPS
+from .tracked_apps import BashTrackedAppsCore, detect_all_apps, TRACKED_APPS
 
 
 # ──────────────────────────────────────────────────────────────
 # Profile Core
 # ──────────────────────────────────────────────────────────────
 
-class PythonProfileCore(ProfileCore):
+class BashProfileCore(ProfileCore):
     """Обёртка над theme-profile bash скриптом."""
 
     def __init__(self, theme_profile_bin: str = "theme-profile"):
@@ -242,7 +243,7 @@ class PythonProfileCore(ProfileCore):
 WALLPAPER_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
 
 
-class PythonWallpaperCore(WallpaperCore):
+class BashWallpaperCore(WallpaperCore):
     """Обёртка над wallpaper-* bash скриптами."""
 
     def __init__(self):
@@ -394,7 +395,7 @@ class PythonWallpaperCore(WallpaperCore):
 SETTINGS_FILE = settings_file()
 
 
-class PythonSettingsCore(SettingsCore):
+class BashSettingsCore(SettingsCore):
     """Настройки приложения в JSON."""
 
     def load(self) -> AppSettings:
@@ -428,17 +429,17 @@ class PythonSettingsCore(SettingsCore):
 # ──────────────────────────────────────────────────────────────
 
 __all__ = [
-    "PythonProfileCore",
-    "PythonWallpaperCore",
-    "PythonTrackedAppsCore",
-    "PythonSettingsCore",
-    "PYTHON_FACTORIES",
+    "BashProfileCore",
+    "BashWallpaperCore",
+    "BashTrackedAppsCore",
+    "BashSettingsCore",
+    "BASH_FACTORIES",
 ]
 
 #: Ядро, выбираемое CoreFactory._build() — см. CoreFactory.set_backend()
-PYTHON_FACTORIES = {
-    "profile": PythonProfileCore,
-    "wallpaper": PythonWallpaperCore,
-    "tracked_apps": PythonTrackedAppsCore,
-    "settings": PythonSettingsCore,
+BASH_FACTORIES = {
+    "profile": BashProfileCore,
+    "wallpaper": BashWallpaperCore,
+    "tracked_apps": BashTrackedAppsCore,
+    "settings": BashSettingsCore,
 }

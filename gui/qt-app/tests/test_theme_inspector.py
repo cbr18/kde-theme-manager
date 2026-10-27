@@ -16,7 +16,7 @@ if str(SRC_DIR) not in sys.path:
 
 from core.theme_schema import FIELDS, FIELD_BY_ID, SECTIONS  # noqa: E402
 from core.theme_core import (  # noqa: E402
-    PythonThemeCore,
+    AppThemeCore,
     _json_patch,
     _json_read,
     _parse_ini,
@@ -161,7 +161,7 @@ def test_schema_is_consistent() -> None:
 
 
 def test_reads_live_values(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     assert core.get("accent_color")["value"] == "128,142,71"
     assert core.get("color_scheme")["value"] == "Breeze1"
     assert core.get("look_and_feel")["value"] == "glass"
@@ -180,7 +180,7 @@ def test_reads_live_values(home: Path) -> None:
 
 
 def test_profile_diff_and_scope(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     live = core.get("accent_color", "live")
     assert live["differs"] is True
     assert live["profileValue"] == "10,20,30"
@@ -196,7 +196,7 @@ def test_profile_diff_and_scope(home: Path) -> None:
 
 
 def test_write_kde_and_undo(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     result = core.set_value("accent_color", "#ff0000")
     assert result.success, result.message
     assert core.get("accent_color")["value"] == "255,0,0"
@@ -209,7 +209,7 @@ def test_write_kde_and_undo(home: Path) -> None:
 
 
 def test_write_jsonc_preserves_comments_and_trailing_commas(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     result = core.set_value("zed_mode", "light")
     assert result.success, result.message
 
@@ -232,7 +232,7 @@ def test_json_patch_skips_comments_and_nested_paths() -> None:
 
 
 def test_write_toml_section(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     assert core.set_value("alacritty_opacity", 0.65).success
     text = (home / ".config/alacritty/alacritty.toml").read_text()
     assert "opacity = 0.65" in text
@@ -243,7 +243,7 @@ def test_write_toml_section(home: Path) -> None:
 
 
 def test_write_obsidian_inserts_key(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     assert core.set_value("obsidian_theme", "moonstone").success
     text = (home / "obsidian/vault/.obsidian/appearance.json").read_text()
     assert '"theme": "moonstone"' in text
@@ -251,7 +251,7 @@ def test_write_obsidian_inserts_key(home: Path) -> None:
 
 
 def test_write_kitty_and_font(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     assert core.set_value("kitty_opacity", 0.7).success
     assert "background_opacity 0.7" in (home / ".config/kitty/kitty.conf").read_text()
     assert core.get("kitty_opacity")["value"] == pytest.approx(0.7)
@@ -262,7 +262,7 @@ def test_write_kitty_and_font(home: Path) -> None:
 
 
 def test_write_kvantum_theme_file(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     assert core.set_value("kvantum_blurring", True).success
     text = (home / ".config/Kvantum/Orchis/OrchisDark.kvconfig").read_text()
     assert "blurring=true" in text
@@ -270,7 +270,7 @@ def test_write_kvantum_theme_file(home: Path) -> None:
 
 
 def test_revert_session(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     original = (home / ".config/kdeglobals").read_text()
     assert core.set_value("accent_color", "#010203").success
     assert core.set_value("kitty_opacity", 0.9).success
@@ -288,7 +288,7 @@ def test_revert_session(home: Path) -> None:
 
 
 def test_validation_flags_broken_values(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     kde = home / ".config/kdeglobals"
     kde.write_text(kde.read_text().replace(
         "LookAndFeelPackage=glass", "LookAndFeelPackage=Usage: kreadconfig6 --help"
@@ -307,7 +307,7 @@ def test_validation_flags_broken_values(home: Path) -> None:
 
 
 def test_blur_conflict_is_reported(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     kwinrc = home / ".config/kwinrc"
     kwinrc.write_text(kwinrc.read_text().replace("blurEnabled=false", "blurEnabled=true"))
     conflicts = [issue for issue in core.validate() if "both enabled" in issue.message]
@@ -315,14 +315,14 @@ def test_blur_conflict_is_reported(home: Path) -> None:
 
 
 def test_search_uses_labels_keys_and_russian_keywords(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     assert {item["id"] for item in core.search("kitty")} >= {"kitty_opacity", "kitty_blur"}
     assert any(item["id"] == "ui_font" for item in core.search("шрифт"))
     assert core.search("") == []
 
 
 def test_revert_removes_a_file_created_in_the_session(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     kitty = home / ".config/kitty/kitty.conf"
     kitty.unlink()
     assert core.set_value("kitty_opacity", 0.9).success
@@ -332,7 +332,7 @@ def test_revert_removes_a_file_created_in_the_session(home: Path) -> None:
 
 
 def test_atomic_write_preserves_private_permissions(home: Path) -> None:
-    core = PythonThemeCore()
+    core = AppThemeCore()
     kdeglobals = home / ".config/kdeglobals"
     kdeglobals.chmod(0o600)
     assert core.set_value("accent_color", "#010203").success

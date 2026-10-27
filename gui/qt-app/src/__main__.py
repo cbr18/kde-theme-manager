@@ -41,15 +41,15 @@ A Qt/QML-based theme profile manager for KDE Plasma.
 Usage: kde-theme-manager [options]
 
 Options:
-  --core NAME    Core implementation: python | rust | auto
-                 (auto picks rust when the library is built)
+  --core NAME    Core implementation: rust | bash | auto
+                 (rust is the default; auto picks rust when built)
   --list-cores   Show the available cores and exit
   --help, -h     Show this help message
   --version      Show version and exit
 
 Without --core the value of $KTM_CORE is used, then the saved setting
 (Settings page → Core). An explicitly requested but missing Rust core is an
-error; an unavailable saved setting falls back to Python with a warning.
+error; an unavailable saved setting falls back to Bash with a warning.
 
 Requires KDE Plasma 6 + Kirigami (org.kde.kirigami, org.kde.desktop QML modules).
 For PySide6 bundled Qt, ensure system QML import paths are available.
@@ -71,7 +71,7 @@ def _extract_core_arg() -> Optional[str]:
             requested = arg.split("=", 1)[1]
         elif arg == "--core":
             if index + 1 >= len(args):
-                raise SystemExit("--core requires a value: python | rust | auto")
+                raise SystemExit("--core requires a value: rust | bash | auto")
             index += 1
             requested = args[index]
         else:
@@ -88,7 +88,6 @@ def _list_cores() -> int:
     from core.rust_core import find_library, library_candidates
 
     available = CoreFactory.rust_available()
-    print("python   always available (wraps the theme-profile / wallpaper-* scripts)")
     print(f"rust     {'available' if available else 'NOT AVAILABLE'}")
     found = find_library()
     if found:
@@ -98,13 +97,14 @@ def _list_cores() -> int:
         print("         searched:")
         for candidate in library_candidates():
             print(f"           {candidate}")
+    print("bash     always available (delegates to theme-profile / wallpaper-*; local settings)")
     return 0
 
 
 def _select_core(requested: Optional[str]) -> None:
     """Choose the core backend before any controller is created.
 
-    Priority: --core flag → $KTM_CORE → saved setting → python.
+    Priority: --core flag → $KTM_CORE → saved setting → rust.
     """
     from core.protocol import CoreFactory
 
@@ -114,11 +114,11 @@ def _select_core(requested: Optional[str]) -> None:
 
     if requested is None:
         try:
-            from core.python_core import PythonSettingsCore
+            from core.bash_core import BashSettingsCore
 
-            requested = PythonSettingsCore().load().core_backend or "python"
+            requested = BashSettingsCore().load().core_backend or "rust"
         except Exception:
-            requested = "python"
+            requested = "rust"
 
     # A core asked for by flag/env must exist; a stale saved setting must not
     # stop the application from starting.
@@ -132,9 +132,9 @@ def _select_core(requested: Optional[str]) -> None:
         # Persist the choice so the launcher and the next start agree.
         try:
             from core.protocol import AppSettings
-            from core.python_core import PythonSettingsCore
+            from core.bash_core import BashSettingsCore
 
-            settings_core = PythonSettingsCore()
+            settings_core = BashSettingsCore()
             settings = settings_core.load()
             if settings.core_backend != CoreFactory.backend():
                 settings_core.save(

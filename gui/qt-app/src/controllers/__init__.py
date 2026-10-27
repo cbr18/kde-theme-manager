@@ -17,9 +17,6 @@ from core.protocol import (
     ProfileCore, WallpaperCore, TrackedAppsCore, SettingsCore,
     ProfileInfo, Component, AppStatus, Result, AppSettings
 )
-from core.python_core import (
-    PythonProfileCore, PythonWallpaperCore, PythonTrackedAppsCore, PythonSettingsCore
-)
 from core import CoreFactory
 from core.paths import validate_profile_name
 from .theme_inspector import ThemeInspectorController

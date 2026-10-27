@@ -7,7 +7,7 @@ JSON strings (``*mut c_char``, freed with ``kde_theme_core_free_string``) and
 ``kde_theme_core_get_error``.
 
 The four classes at the bottom implement the same protocol ABCs as
-``python_core``, so controllers/QML cannot tell which core they are talking to
+``bash_core``, so controllers/QML cannot tell which core they are talking to
 (``CoreFactory`` picks one).
 
 Contract notes (both cores have to agree, otherwise switching backends changes
@@ -18,7 +18,7 @@ behaviour):
   reads profiles natively.
 * Wallpaper enumeration uses the directory from the app settings; it is pushed
   into the library with ``kde_theme_core_wallpaper_set_dir`` before every call,
-  mirroring ``PythonWallpaperCore._script_env``.
+  mirroring ``BashWallpaperCore._script_env``.
 """
 
 from __future__ import annotations
@@ -467,7 +467,7 @@ class RustSettingsCore(SettingsCore):
 # Factory registration
 # ──────────────────────────────────────────────────────────────
 
-#: python backend name → rust backend equivalent
+#: bash backend name → rust backend equivalent
 RUST_FACTORIES: dict[str, Callable[[], object]] = {
     "profile": RustProfileCore,
     "wallpaper": RustWallpaperCore,

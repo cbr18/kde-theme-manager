@@ -27,7 +27,7 @@ MANIFESTS="$ROOT/manifests"
 ACTIVE_FILE="$ROOT/active-profile"
 
 # Component → path prefixes mapping (for --components filtering)
-# Keys match TrackedAppDef.id from Python core
+# Keys match TrackedAppDef.id from the Bash core
 # Paths are colon-separated (no colons in paths)
 declare -A COMPONENT_PATHS=(
   [kwin]=".config/kwinrc:.config/kwinrulesrc"

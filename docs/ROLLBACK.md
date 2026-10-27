@@ -97,17 +97,17 @@ theme-profile list
 
 ### Rolling back the GUI core
 
-The app can run on the Rust core (`libkde_theme_core.so`) or the Python core.
-If the Rust core misbehaves, go back to Python — no reinstall needed:
+The app can run on the Rust core (`libkde_theme_core.so`, the default) or the
+Bash core. If the Rust core misbehaves, go back to Bash — no reinstall needed:
 
 ```bash
-kde-theme-manager --core python     # this run
-KTM_CORE=python kde-theme-manager   # or via the environment
-# Settings → Core → python persists the choice for the next start
+kde-theme-manager --core bash     # this run
+KTM_CORE=bash kde-theme-manager   # or via the environment
+# Settings → Core → bash persists the choice for the next start
 ```
 
-`--core python` is persisted too, so it survives restarts. The setting is stored
-in `~/.config/theme-profile/app-preferences.json` (`"core_backend": "python"`),
+`--core bash` is persisted too, so it survives restarts. The setting is stored
+in `~/.config/theme-profile/app-preferences.json` (`"core_backend": "bash"`),
 which can also be edited by hand while the app is closed:
 
 ```bash
@@ -116,12 +116,15 @@ import json, os, pathlib
 root = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", pathlib.Path.home() / ".config"))
 path = root / "theme-profile" / "app-preferences.json"
 data = json.loads(path.read_text())
-data["core_backend"] = "python"
+data["core_backend"] = "bash"
 path.write_text(json.dumps(data, indent=2) + "\n")
 PY
 ```
 
-If the library is the problem, remove it — the app then reports the Python core
+The legacy value `"python"` is still accepted as an alias for `"bash"`, so old
+scripts and settings keep working.
+
+If the library is the problem, remove it — the app then reports the Bash core
 and keeps working:
 
 ```bash

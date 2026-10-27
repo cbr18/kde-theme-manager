@@ -594,7 +594,7 @@ fi
 
 # --- 12. Rust core ships with the GUI install --------------------------------
 # The GUI can run on two cores; the Rust one is a shared library the app loads
-# from <appdir>/lib and falls back to Python when it is absent.
+# from <appdir>/lib and falls back to Bash when it is absent.
 echo "=== Section 12: Rust core installation ==="
 
 RUST_LIB_SRC="$SCRIPT_DIR/gui/qt-app/src/core/rust_core/target/release/libkde_theme_core.so"
@@ -672,12 +672,12 @@ if [ -f "$RUST_LIB_SRC" ]; then
   fi
 else
   # A fresh clone has no target/ tree: the installer must warn, not fail, and
-  # the app must fall back to the Python core.
+  # the app must fall back to the Bash core.
   out="$(env -i HOME="$FAKE_HOME_RUST" XDG_DATA_HOME="$FAKE_HOME_RUST/.local/share" \
     PATH="/usr/bin:/bin" \
     bash "$SCRIPT_DIR/scripts/install-kde-theme-manager.sh" --no-venv 2>&1)"
   case "$out" in
-    *"Python core"*) ok "missing Rust core warns about the Python fallback" ;;
+    *"Bash core"*) ok "missing Rust core warns about the Bash fallback" ;;
     *) fail "missing Rust core produced no warning: $out" ;;
   esac
 fi

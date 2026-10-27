@@ -367,8 +367,8 @@ def detect_all_apps() -> list[Component]:
 # Реализация TrackedAppsCore
 # ──────────────────────────────────────────────────────────────
 
-class PythonTrackedAppsCore(TrackedAppsCore):
-    """Python реализация реестра отслеживаемых приложений."""
+class BashTrackedAppsCore(TrackedAppsCore):
+    """Локальная реализация реестра отслеживаемых приложений."""
 
     def __init__(self):
         self._cache: Optional[list[Component]] = None
@@ -411,5 +411,5 @@ __all__ = [
     "detect_all_apps",
     "detect_app_status",
     "build_component",
-    "PythonTrackedAppsCore",
+    "BashTrackedAppsCore",
 ]

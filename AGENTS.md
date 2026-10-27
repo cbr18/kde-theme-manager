@@ -68,15 +68,17 @@ A change is not done until the docs agree with the code. At minimum:
   tests and dry runs).
 - **JSONC files** (Zed / VS Code / Cursor / Obsidian / fastfetch) are patched by
   value position and never reserialised.
-- **Two interchangeable cores**: Python (`gui/qt-app/src/core/python_core.py`) is
-  the reference; Rust (`gui/qt-app/src/core/rust_core/`) must stay at parity
-  (`tests/test_gui.py::TestCoreParity`). Select with `--core`, `$KTM_CORE` or
-  *Settings → Core*.
+- **Two interchangeable cores**: Bash (`gui/qt-app/src/core/bash_core.py`) drives
+  `theme-profile` / `wallpaper-*` and keeps settings/app detection local; Rust
+  (`gui/qt-app/src/core/rust_core/`) must stay at parity
+  (`tests/test_gui.py::TestCoreParity`). Rust is the default; select with
+  `--core`, `$KTM_CORE` or *Settings → Core*. `python` is a legacy alias for
+  `bash`.
 
 ## Verification (run before committing)
 
 ```bash
-# Python tests (offscreen Qt; ~157 tests)
+# Python tests (offscreen Qt; ~159 tests)
 cd gui/qt-app && QT_QPA_PLATFORM=offscreen uv run --project . --extra dev pytest tests -q
 
 # Bash tests (~96 assertions) — from the repo root
