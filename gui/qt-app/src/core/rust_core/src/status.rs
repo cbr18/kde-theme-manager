@@ -53,6 +53,12 @@ pub fn status() -> String {
 
     emit("kde_color_scheme", kdeglobals("General", "ColorScheme"));
     emit("kde_accent", kdeglobals("General", "AccentColor"));
+    emit("kde_accent_source",
+         if kdeglobals("General", "accentColorFromWallpaper").as_deref() == Some("true") {
+             Some("wallpaper".to_string())
+         } else {
+             Some("explicit".to_string())
+         });
     emit("kde_look_and_feel", kdeglobals("KDE", "LookAndFeelPackage"));
     emit("kde_widget_style", kdeglobals("KDE", "widgetStyle"));
 
