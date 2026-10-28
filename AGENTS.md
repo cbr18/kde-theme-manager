@@ -71,8 +71,7 @@ A change is not done until the docs agree with the code. At minimum:
 - **Two interchangeable cores**: CLI (`gui/qt-app/src/core/cli_core.py`) shells to
   the Rust CLI for profile/wallpaper operations; Rust (`gui/qt-app/src/core/rust_core/`)
   works natively through a shared library. Rust is the default; select with
-  `--core`, `$KTM_CORE` or *Settings → Core*. `python`/`bash` are legacy aliases
-  for `cli`.
+  `--core`, `$KTM_CORE` or *Settings → Core*.
 
 ## Verification (run before committing)
 

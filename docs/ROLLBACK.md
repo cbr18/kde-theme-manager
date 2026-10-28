@@ -122,9 +122,6 @@ path.write_text(json.dumps(data, indent=2) + "\n")
 PY
 ```
 
-The legacy values `"python"` and `"bash"` are still accepted as aliases for
-`"cli"`, so old scripts and settings keep working.
-
 If the library is the problem, remove it — the app then reports the CLI core
 and keeps working:
 

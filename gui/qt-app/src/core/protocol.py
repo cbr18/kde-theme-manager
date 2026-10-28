@@ -354,13 +354,10 @@ class AppSettings:
 
     # Какое ядро использовать при старте: "rust" | "cli" | "auto"
     # (переопределяется флагом --core и переменной окружения KTM_CORE).
-    # "bash"/"python" — устаревшие псевдонимы cli: старые настройки работают.
     core_backend: str = "rust"
 
     def __post_init__(self) -> None:
         backend = str(self.core_backend or "rust").strip().lower()
-        if backend in ("python", "bash"):
-            backend = "cli"
         if backend not in ("rust", "cli", "auto"):
             backend = "rust"
         if backend != self.core_backend:
@@ -417,8 +414,6 @@ class CoreFactory:
 
     #: Доступные бэкенды. "auto" — rust, если библиотека есть, иначе cli.
     BACKENDS = ("rust", "cli", "auto")
-    #: Устаревшие имена; сохранённые настройки и старые скрипты.
-    LEGACY_ALIASES = {"bash": "cli", "python": "cli"}
     #: Переменная окружения, переопределяющая настройку (но не флаг --core).
     ENV_VAR = "KTM_CORE"
 
@@ -438,7 +433,6 @@ class CoreFactory:
     def normalize_backend(cls, backend: str) -> str:
         """Проверить и нормализовать имя бэкенда."""
         name = (backend or "").strip().lower()
-        name = cls.LEGACY_ALIASES.get(name, name)
         if name not in cls.BACKENDS:
             raise ValueError(
                 f"Unknown core backend {backend!r}; expected one of "

@@ -338,8 +338,6 @@ setting that no longer works (library deleted, app moved) falls back to the
 CLI core with a warning on stderr instead of blocking startup.
 
 `--core rust` is also persisted, so the launcher and the next start agree.
-`python`/`bash` are accepted as legacy aliases for `cli` so existing settings
-and scripts keep working.
 
 ### Building the Rust core
 

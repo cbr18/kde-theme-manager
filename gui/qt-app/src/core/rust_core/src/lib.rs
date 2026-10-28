@@ -11,7 +11,6 @@
 #![allow(non_snake_case)]
 
 pub mod types;
-pub mod ffi;
 pub mod paths;
 pub mod profile;
 pub mod wallpaper;

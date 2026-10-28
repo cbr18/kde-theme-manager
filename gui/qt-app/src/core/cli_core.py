@@ -11,7 +11,6 @@ import json
 import os
 import re
 import subprocess
-import time
 import shutil
 from pathlib import Path
 from typing import Optional

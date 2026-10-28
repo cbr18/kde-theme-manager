@@ -249,6 +249,5 @@ $XDG_CONFIG_HOME/theme-profile/        # по умолчанию ~/.config/theme
   ядра, Rust (по умолчанию) и CLI-адаптер, выбор через `--core rust|cli|auto`,
   `$KTM_CORE` или *Settings → Core*; Rust-библиотека `libkde_theme_core.so`
   ставится в `~/.local/share/kde-theme-manager/lib/`, при её отсутствии
-  приложение откатывается на CLI-ядро. `python`/`bash` остаются legacy-
-  псевдонимами `cli`. Паритет ядер проверяется
+  приложение откатывается на CLI-ядро. Паритет ядер проверяется
   `tests/test_gui.py::TestCoreParity`.

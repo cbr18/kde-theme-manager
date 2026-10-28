@@ -1690,11 +1690,6 @@ def test_core_factory_soft_fallback_warns(core_factory, monkeypatch, capsys) -> 
     assert "CLI core" in err
 
 
-def test_core_factory_accepts_legacy_python_alias(core_factory) -> None:
-    assert core_factory.set_backend("python") == "cli"
-    assert core_factory.backend_label() == "CLI"
-
-
 def test_core_factory_reads_the_environment(core_factory, monkeypatch) -> None:
     monkeypatch.setenv(core_factory.ENV_VAR, "cli")
     assert core_factory.set_backend_from_env() == "cli"
@@ -1740,7 +1735,7 @@ def test_settings_expose_the_core_selector() -> None:
     assert AppSettings.from_dict({}).core_backend == "rust"
     assert AppSettings.from_dict({"core_backend": "rust"}).core_backend == "rust"
     assert AppSettings.from_dict({"core_backend": "cli"}).core_backend == "cli"
-    assert AppSettings.from_dict({"core_backend": "python"}).core_backend == "cli"
+    assert AppSettings.from_dict({"core_backend": "bogus"}).core_backend == "rust"
     assert defaults.to_dict()["core_backend"] == "rust"
 
 
@@ -1764,7 +1759,7 @@ def _load_main_module():
         (["--core", "rust"], "rust", []),
         (["--core=auto", "--verbose"], "auto", ["--verbose"]),
         (["--core", "cli", "file.qml"], "cli", ["file.qml"]),
-        (["--core", "python", "file.qml"], "python", ["file.qml"]),
+        (["--core", "cli", "file.qml"], "cli", ["file.qml"]),
         ([], None, []),
     ],
 )

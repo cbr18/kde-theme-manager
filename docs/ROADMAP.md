@@ -95,8 +95,8 @@
 > module (~1 ms instead of ~300 ms) with strict JSONC/INI readers, a real
 > `kwin_glass` (better-blur-dx) and Zen auto-detection; the GUI diff runs
 > off-thread. Two cores remain: `rust` (library, default) and `cli` (adapter to
-> the Rust CLI; `python`/`bash` are legacy aliases). Файлы Rust-крейта:
-> `src/core/rust_core/src/{lib,ffi,types,paths,profile,wallpaper,tracked_apps,
+> the Rust CLI). Файлы Rust-крейта:
+> `src/core/rust_core/src/{lib,types,paths,profile,wallpaper,tracked_apps,
 > settings,config_parser,status}.rs` + `src/bin/`; Python-биндинг —
 > `src/core/rust_core.py`; CLI-адаптер — `src/core/cli_core.py`.
 > Переключение: `--core rust|cli|auto`, `$KTM_CORE`, *Settings → Core*;
