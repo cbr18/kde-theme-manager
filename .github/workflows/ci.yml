@@ -61,7 +61,7 @@ jobs:
         run: cargo build --release
         working-directory: gui/qt-app/src/core/rust_core
       - name: Install uv
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
       - name: Install dependencies

@@ -20,8 +20,11 @@ CLI_DIR="${KTM_CLI_DIR:-$SCRIPT_DIR/gui/qt-app/src/core/rust_core/target/release
 # The kit installer builds the CLI with cargo; a fake HOME must not reset the
 # crate cache, so the real cargo home is passed through by the tests below.
 REAL_CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+REAL_RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
 # env -i below strips the rustup bin dir from PATH; the kit installer
-# needs cargo to build the CLI, so carry the real one through.
+# needs cargo to build the CLI, so carry the real toolchain through
+# (cargo on hosted runners is a rustup proxy and resolves its toolchain
+# via RUSTUP_HOME, which defaults to $HOME/.rustup).
 REAL_CARGO_BIN="$(dirname "$(command -v cargo 2>/dev/null || echo /usr/bin/cargo)")"
 
 ok()   { PASS=$((PASS + 1)); echo "  ✅ $1"; }
@@ -536,7 +539,7 @@ fi
 # The kit installer must bring up both the CLI and the GUI (and --no-gui must
 # install the CLI only).
 if env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
-  PATH="/usr/bin:/bin:$REAL_CARGO_BIN" CARGO_HOME="$REAL_CARGO_HOME" \
+  PATH="/usr/bin:/bin:$REAL_CARGO_BIN" CARGO_HOME="$REAL_CARGO_HOME" RUSTUP_HOME="$REAL_RUSTUP_HOME" \
   bash "$SCRIPT_DIR/scripts/install-theme-profile-kit.sh" --no-venv >/dev/null 2>&1; then
   ok "install-theme-profile-kit.sh runs"
 else
@@ -559,7 +562,7 @@ fi
 
 rm -rf "$FAKE_HOME/.local/share/kde-theme-manager" "$FAKE_HOME/.local/bin/kde-theme-manager"
 env -i HOME="$FAKE_HOME" XDG_DATA_HOME="$FAKE_HOME/.local/share" \
-  PATH="/usr/bin:/bin:$REAL_CARGO_BIN" CARGO_HOME="$REAL_CARGO_HOME" \
+  PATH="/usr/bin:/bin:$REAL_CARGO_BIN" CARGO_HOME="$REAL_CARGO_HOME" RUSTUP_HOME="$REAL_RUSTUP_HOME" \
   bash "$SCRIPT_DIR/scripts/install-theme-profile-kit.sh" --no-gui >/dev/null 2>&1
 if [ ! -e "$FAKE_HOME/.local/bin/kde-theme-manager" ]; then
   ok "--no-gui installs the CLI without the app"
