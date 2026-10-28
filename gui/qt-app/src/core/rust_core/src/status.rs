@@ -18,6 +18,23 @@ fn kdeglobals(group: &str, key: &str) -> Option<String> {
     ini_group_key(&config_home().join("kdeglobals"), group, key)
 }
 
+/// `qdbus6 org.kde.KWin /Effects loadedEffects` (best effort, 1 s cap).
+/// The reply is one effect per line; joined with commas for a single value.
+fn kwin_loaded_effects() -> String {
+    use std::process::Command;
+    let raw = Command::new("timeout")
+        .args(["1", "qdbus6", "org.kde.KWin", "/Effects", "loadedEffects"])
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default();
+    raw.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 /// Contents of `theme-profile status`.
 pub fn status() -> String {
     let cfg = config_home();
@@ -54,6 +71,9 @@ pub fn status() -> String {
     emit("kwin_blur", kwin("Plugins", "blurEnabled"));
     emit("kwin_contrast", kwin("Plugins", "contrastEnabled"));
     emit("kwin_better_blur_dx", kwin("Plugins", "better_blur_dxEnabled"));
+    // Ground truth from the running wm: which KWin effects are actually loaded.
+    // One best-effort D-Bus call, bounded by `timeout` (absent on CI).
+    emit("kwin_loaded_effects", Some(kwin_loaded_effects()));
 
     for (key, k) in [
         ("bbdx_blur_strength", "BlurStrength"),

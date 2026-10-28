@@ -1,14 +1,13 @@
-//! `wallpaper-prev` — Rust CLI (replaces the bash script removed in 0.5.0).
+//! `wallpaper-prev` — Rust CLI (thin wrapper over the shared core).
 //!
 //! Same contract as `wallpaper-next`, stepping backwards with wrap-around.
+//! All logic lives in `wallpaper.rs` — the binary just wires the environment.
 
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 
 use kde_theme_core::paths::{cache_home, config_home, home_dir};
-use kde_theme_core::wallpaper::{
-    anchor_index, list_wallpapers_in, write_cache_index,
-};
+use kde_theme_core::wallpaper::{list_wallpapers_in, step_index};
 
 fn env_or(key: &str, default: PathBuf) -> PathBuf {
     std::env::var_os(key)
@@ -35,12 +34,13 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     }
 
-    let anchor = anchor_index(&files, &state, Some(&plasma));
-    let index = (anchor + files.len() - 1) % files.len();
-    if let Err(e) = write_cache_index(&state, index) {
-        eprintln!("wallpaper-prev: {e}");
-        return ExitCode::from(1);
-    }
+    let index = match step_index(&files, &state, Some(&plasma), -1) {
+        Ok(index) => index,
+        Err(e) => {
+            eprintln!("wallpaper-prev: {e}");
+            return ExitCode::from(1);
+        }
+    };
 
     if std::env::var_os("WALLPAPER_DRY_RUN").is_some() {
         println!("{}", files[index]);

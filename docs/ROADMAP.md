@@ -92,7 +92,8 @@
 > binary set (`theme-profile`, `theme-menu`, `wallpaper-picker/next/prev`) built
 > from `src/core/rust_core/src/bin/`; mutations (`apply`/`save`/`diff`) run
 > natively in `profile.rs` (no delegation); `status` is a data-driven native
-> module (~1 ms instead of ~300 ms) with strict JSONC/INI readers, a real
+> module (milliseconds instead of ~300 ms; one optional D-Bus call for
+> loaded effects) with strict JSONC/INI readers, a real
 > `kwin_glass` (better-blur-dx) and Zen auto-detection; the GUI diff runs
 > off-thread. Two cores remain: `rust` (library, default) and `cli` (adapter to
 > the Rust CLI). Файлы Rust-крейта:

@@ -102,59 +102,224 @@ pub fn cache_index() -> PathBuf {
         .join("wallpaper_index")
 }
 
-/// Environment forcing the CLI binaries onto our directory
-fn script_env() -> Vec<(&'static str, String)> {
-    vec![("WALLPAPER_DIR", wallpaper_dir().to_string_lossy().to_string())]
+/// Cache thumbnails and the wofi CSS live under the XDG cache/config dirs.
+const PICKER_THUMB_DIR: &str = "wallpaper-picker";
+const PICKER_STYLE: &str = "wofi/wallpaper.css";
+
+const THUMB_WIDTH: &str = "420";
+const THUMB_HEIGHT: &str = "260";
+const THUMB_RADIUS: u32 = 18;
+const THUMB_VERSION: &str = "rounded-v1";
+
+/// Deterministic 64-bit FNV-1a (cache keys don't leave the machine).
+fn fnv1a64(input: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in input {
+        hash ^= u64::from(b);
+        hash = hash.wrapping_mul(0x1000_0000_01b3);
+    }
+    hash
 }
 
-/// Pick wallpaper using wofi
-pub fn pick_wallpaper() -> Result<String> {
-    let wallpapers = list_wallpapers()?;
-    if wallpapers.is_empty() {
+fn thumb_path(thumb_dir: &Path, file: &str) -> PathBuf {
+    let mut key = file.as_bytes().to_vec();
+    key.push(0);
+    key.extend_from_slice(THUMB_VERSION.as_bytes());
+    let hash = fnv1a64(&key);
+    thumb_dir.join(format!("{hash:016x}.png"))
+}
+
+fn file_newer_than(file: &str, thumb: &Path) -> bool {
+    let file_mtime = fs::metadata(file).and_then(|m| m.modified()).ok();
+    let thumb_mtime = fs::metadata(thumb).and_then(|m| m.modified()).ok();
+    match (file_mtime, thumb_mtime) {
+        (Some(f), Some(t)) => f > t,
+        _ => true,
+    }
+}
+
+/// Generate a rounded-corner thumbnail with ImageMagick (best effort).
+fn make_thumb(file: &str, thumb: &Path) -> bool {
+    let width: u32 = THUMB_WIDTH.parse().unwrap_or(0);
+    let height: u32 = THUMB_HEIGHT.parse().unwrap_or(0);
+    let status = Command::new("magick")
+        .arg(file)
+        .args(["-thumbnail", &format!("{THUMB_WIDTH}x{THUMB_HEIGHT}^")])
+        .args(["-gravity", "center"])
+        .args(["-extent", &format!("{THUMB_WIDTH}x{THUMB_HEIGHT}")])
+        .arg("(")
+        .args(["-size", &format!("{THUMB_WIDTH}x{THUMB_HEIGHT}"), "xc:none"])
+        .args(["-fill", "white"])
+        .arg("-draw")
+        .arg(format!(
+            "roundrectangle 0,0,{},{},{},{}",
+            width.saturating_sub(1),
+            height.saturating_sub(1),
+            THUMB_RADIUS,
+            THUMB_RADIUS
+        ))
+        .arg(")")
+        .args(["-alpha", "set", "-compose", "DstIn", "-composite", thumb.to_string_lossy().as_ref()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    status.map(|s| s.success()).unwrap_or(false)
+}
+
+/// Outcome of the interactive picker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PickOutcome {
+    /// wofi was cancelled (empty selection) — nothing to do.
+    Cancelled,
+    /// A wallpaper was chosen (its full-list index is already cached).
+    Selected(String),
+}
+
+/// Full picker flow: thumbnails -> wofi grid -> cache the selection.
+///
+/// Shared by the library (FFI `kde_theme_core_wallpaper_pick`) and the CLI
+/// binary (`theme-profile`/`wallpaper-picker`), so there is exactly one
+/// implementation of the picker logic.
+pub fn pick_wallpaper_flow(
+    dir: &Path,
+    state: &Path,
+    thumb_dir: &Path,
+    style: &Path,
+) -> Result<PickOutcome> {
+    let files = list_wallpapers_in(dir)?;
+    if files.is_empty() {
         return Err(anyhow::anyhow!("No wallpapers found"));
     }
 
-    let mut command = Command::new("wallpaper-picker");
-    for (key, value) in script_env() {
-        command.env(key, value);
-    }
-    let output = command
-        .output()
-        .context("Failed to run wallpaper-picker")?;
+    fs::create_dir_all(thumb_dir)?;
 
-    if !output.status.success() {
-        return Err(anyhow::anyhow!("wallpaper-picker cancelled or failed"));
+    let mut entries = String::new();
+    let mut displayed: Vec<String> = Vec::new();
+
+    for file in &files {
+        let name = Path::new(file)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| file.clone());
+        let thumb = thumb_path(thumb_dir, file);
+        if (!thumb.is_file() || file_newer_than(file, &thumb)) && !make_thumb(file, &thumb) {
+            let _ = fs::remove_file(&thumb);
+            continue;
+        }
+        displayed.push(file.clone());
+        entries.push_str(&format!("img:{}:text:{}\n", thumb.display(), name));
     }
 
-    current_wallpaper()
+    if displayed.is_empty() {
+        return Err(anyhow::anyhow!("No displayable wallpapers"));
+    }
+
+    let mut wofi = Command::new("wofi")
+        .args([
+            "--dmenu",
+            "--allow-images",
+            "--insensitive",
+            "--width",
+            "40%",
+            "--height",
+            "60%",
+            "--columns",
+            "4",
+            "--define",
+            "image_size=210",
+            "--define",
+            "content_halign=center",
+            "--define",
+            "dmenu-print_line_num=true",
+            "--style",
+            style.to_string_lossy().as_ref(),
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .context("could not start wofi")?;
+
+    if let Some(mut stdin) = wofi.stdin.take() {
+        use std::io::Write;
+        let _ = stdin.write_all(entries.as_bytes());
+    }
+
+    let output = wofi.wait_with_output()?;
+    let selection = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if selection.is_empty() {
+        return Ok(PickOutcome::Cancelled);
+    }
+    if !selection.bytes().all(|b| b.is_ascii_digit()) {
+        // A typed custom entry is not a position.
+        return Err(anyhow::anyhow!("Invalid selection: not a position"));
+    }
+    let index: usize = selection.parse().map_err(|_| anyhow::anyhow!("Invalid selection"))?;
+    let Some(selected) = displayed.get(index) else {
+        return Err(anyhow::anyhow!("Selection out of range"));
+    };
+
+    // Cache the position in the FULL enumeration (the displayed list can be a
+    // subset when a thumbnail failed to render).
+    if let Some(full_index) = files.iter().position(|f| f == selected) {
+        write_cache_index(state, full_index)?;
+    }
+
+    Ok(PickOutcome::Selected(selected.clone()))
 }
 
-/// Next wallpaper
+/// Pick wallpaper using wofi (native — thumbnails + grid are implemented here
+/// and shared with the CLI binary; no subprocess to `wallpaper-picker`).
+pub fn pick_wallpaper() -> Result<String> {
+    let dir = wallpaper_dir();
+    let state = cache_index();
+    let thumb_dir = crate::paths::cache_home().join(PICKER_THUMB_DIR);
+    let style = crate::paths::config_home().join(PICKER_STYLE);
+
+    match pick_wallpaper_flow(&dir, &state, &thumb_dir, &style)? {
+        PickOutcome::Selected(path) => {
+            set_wallpaper(&path)?;
+            Ok(path)
+        }
+        PickOutcome::Cancelled => Err(anyhow::anyhow!("wallpaper picker cancelled")),
+    }
+}
+
+/// Step the wallpaper index relative to the anchor (Plasma's current file,
+/// else the cached index, else 0) and persist the new position.
+pub fn step_index(
+    files: &[String],
+    state: &Path,
+    plasma: Option<&Path>,
+    delta: i64,
+) -> Result<usize> {
+    let len = files.len();
+    if len == 0 {
+        return Err(anyhow::anyhow!("No wallpapers found"));
+    }
+    let anchor = anchor_index(files, state, plasma);
+    let index = ((anchor as i64 + delta).rem_euclid(len as i64)) as usize;
+    write_cache_index(state, index)?;
+    Ok(index)
+}
+
+fn plasma_default_config() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from(".config"))
+        .join("plasma-org.kde.plasma.desktop-appletsrc")
+}
+
+/// Next wallpaper (native — no subprocess to `wallpaper-next`).
 pub fn next_wallpaper() -> Result<()> {
-    let mut command = Command::new("wallpaper-next");
-    for (key, value) in script_env() {
-        command.env(key, value);
-    }
-    let output = command.output().context("Failed to run wallpaper-next")?;
-
-    if !output.status.success() {
-        return Err(anyhow::anyhow!("wallpaper-next failed"));
-    }
-    Ok(())
+    let files = list_wallpapers_in(&wallpaper_dir())?;
+    let index = step_index(&files, &cache_index(), Some(&plasma_default_config()), 1)?;
+    set_wallpaper(&files[index])
 }
 
-/// Previous wallpaper
+/// Previous wallpaper (native — no subprocess to `wallpaper-prev`).
 pub fn prev_wallpaper() -> Result<()> {
-    let mut command = Command::new("wallpaper-prev");
-    for (key, value) in script_env() {
-        command.env(key, value);
-    }
-    let output = command.output().context("Failed to run wallpaper-prev")?;
-
-    if !output.status.success() {
-        return Err(anyhow::anyhow!("wallpaper-prev failed"));
-    }
-    Ok(())
+    let files = list_wallpapers_in(&wallpaper_dir())?;
+    let index = step_index(&files, &cache_index(), Some(&plasma_default_config()), -1)?;
+    set_wallpaper(&files[index])
 }
 
 /// Path of the wallpaper Plasma is showing right now (None — unreadable)
