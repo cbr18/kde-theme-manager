@@ -21,6 +21,32 @@ The end-user data directory (`profiles/`, `backups/`, `manifests/`,
 `active-profile`, `app-preferences.json`) is separate from the code and is never
 touched by install/update.
 
+## Architecture decision (fixed — no other variants)
+
+**The stack is «Rust core + Python GUI». Everything else is off the table.**
+
+1. **GUI is 100 % Python (PySide6 + QML).** The application will not be
+   rewritten in Rust, C++/Qt, nor any other GUI framework. There is no "Rust
+   GUI" plan.
+2. **Core and CLI are 100 % Rust.** `gui/qt-app/src/core/rust_core/` provides
+   the shared library (used by the GUI through `ctypes`, `rust_core.py`) and
+   the CLI binaries (`theme-profile`, `theme-menu`, `wallpaper-picker/next/prev`
+   in `src/bin/`). All profile mutations, `status`, wallpaper logic, settings
+   and the app registry live in Rust.
+3. **Bash is an exception, not an option.** A bash script may exist only where
+   Rust genuinely cannot express the task or would cost roughly 20× the code
+   with no measurable benefit — today that is limited to:
+   - deployment/update/uninstall (`scripts/*.sh`),
+   - the PySide6 launcher wrapper (`gui/qt-app/theme-profile-manager.sh`),
+   - the test harness (`tests/test-scripts.sh`).
+   No application logic lives in bash. External tools (kreadconfig6,
+   kwriteconfig6, magick, plasma-apply-wallpaperimage, kitty, wofi) are
+   binaries invoked from Rust/Python, not bash scripts.
+
+When in doubt: new logic goes to the Rust core; GUI-only glue (Qt signal/slot,
+QML mapping) goes to Python. If you think bash is needed, it is a decision to
+be reviewed, not an implementation detail.
+
 ## Documentation rule (mandatory)
 
 **Every code change must be reflected in the documentation in the same task.**

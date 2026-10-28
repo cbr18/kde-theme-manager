@@ -4,7 +4,7 @@ The application supports the XDG base directories, but existing installations
 created before XDG support keep their data in ``~/.config/theme-profile``.  The
 helpers therefore prefer an already existing XDG location and fall back to the
 legacy path only when it really exists.  Profile names are validated here as a
-single, reusable rule; the same rule is implemented in the bash and Rust cores.
+single, reusable rule; the same rule is implemented in the Rust CLI and the Python CLI core.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ def live_path(relative: str) -> Path:
     Profile snapshots keep the historical ``.config/...`` layout.  Live files
     must be resolved through the XDG variables instead.  Paths outside the
     known XDG prefixes (Zen profiles, ``obsidian/vault``) stay relative to the
-    home directory, exactly like in the bash layer.
+    home directory, exactly like in the Rust CLI.
     """
     path = Path(relative)
     if path.is_absolute():
