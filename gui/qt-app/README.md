@@ -19,6 +19,8 @@ Native KDE Plasma application for managing theme profiles and wallpapers.
 - **App Detection** — Automatically detects installed/configured apps
 - **Non-blocking** — apply/save/delete *and* wallpaper operations (including the
   interactive picker) run off the GUI thread with a busy state
+- **Single instance** — a second launch handsover to the running app (raises its
+  window) and exits, so there is never more than one tray icon
 - **Dogfooding** — App themes itself from the *active* profile
 - **Two interchangeable cores** — the CLI core shells out to the Rust
   `theme-profile` / `wallpaper-*` binaries, the Rust core (`libkde_theme_core.so`)

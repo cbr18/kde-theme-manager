@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtCore import QUrl, QCoreApplication, QTimer, Qt
 from PySide6.QtGui import QPalette, QColor
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 # Importing QtQuick ensures the QML root window is typed as QQuickWindow
 # (needed for grabWindow() and other QQuickWindow-only API).
@@ -99,6 +100,68 @@ def _list_cores() -> int:
             print(f"           {candidate}")
     print("cli      always available (delegates to the Rust CLI theme-profile / wallpaper-*; local settings)")
     return 0
+
+
+SINGLE_INSTANCE_SOCKET = "kde-theme-manager"
+
+
+def _raise_existing_instance(name: str) -> None:
+    """Ask the already-running instance to show its window."""
+    sock = QLocalSocket()
+    sock.connectToServer(name)
+    if sock.waitForConnected(300):
+        sock.write(b"show")
+        sock.flush()
+        sock.waitForBytesWritten(300)
+    sock.disconnectFromServer()
+
+
+def _acquire_single_instance(name: str, server: QLocalServer) -> bool:
+    """Become the single instance (True) or hand over to the running one (False).
+
+    A live instance can be connected to; only then do we consider the socket
+    stale and clean it up. Blindly removing the socket when `listen` fails
+    would break the genuinely running first instance (two tray icons). The
+    `removeServer` before the second `listen` handles the crashed-run case.
+    """
+    probe = QLocalSocket()
+    probe.connectToServer(name)
+    if probe.waitForConnected(300):
+        # Another instance is alive — tell it to show the window and exit.
+        probe.write(b"show")
+        probe.flush()
+        probe.waitForBytesWritten(300)
+        probe.disconnectFromServer()
+        return False
+    probe.disconnectFromServer()
+
+    QLocalServer.removeServer(name)  # stale socket from a previously-crashed run
+    if server.listen(name):
+        return True
+
+    # Lost a race — someone grabbed the name between the probe and the listen.
+    _raise_existing_instance(name)
+    return False
+
+
+def _activate_on_secondary(single_instance: Optional[QLocalServer], main_window: object) -> None:
+    """Show/raise the window when a second launch asks the running app for it."""
+    if single_instance is None:
+        return
+
+    def _on_connection() -> None:
+        while single_instance.hasPendingConnections():
+            conn = single_instance.nextPendingConnection()
+            if conn is not None:
+                conn.close()
+        try:
+            main_window.show()
+            main_window.raise_()
+            main_window.activateWindow()
+        except Exception:  # noqa: BLE001 - cosmetic; the tray must keep working
+            pass
+
+    single_instance.newConnection.connect(_on_connection)
 
 
 def _select_core(requested: Optional[str]) -> None:
@@ -241,6 +304,13 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setWindowIcon(app_icon())
 
+    # Single instance: two running copies meant two tray icons. A second
+    # launch tells the first to show its window and exits.
+    single_instance = QLocalServer(app)
+    if not _acquire_single_instance(SINGLE_INSTANCE_SOCKET, single_instance):
+        print("KDE Theme Manager is already running.", file=sys.stderr)
+        return 0
+
     # Ensure valid palette for Kirigami (PySide6 bundled Qt may lack KDE palette)
     _setup_palette(app)
 
@@ -292,6 +362,9 @@ def main() -> int:
     # (требуется окно; QSystemTrayIcon создаётся ровно один раз)
     main_window = engine.rootObjects()[0]
     register_system_tray(engine, main_window, main_controller)
+
+    # Secondary launches ask this instance to pop up the window.
+    _activate_on_secondary(single_instance, main_window)
 
     # Dev helper for visual smoke tests: open the Theme inspector immediately.
     if os.environ.get("KTM_OPEN_THEME") == "1":

@@ -1864,3 +1864,28 @@ def test_help_mentions_the_core_flag(capsys) -> None:
 
     out = capsys.readouterr().out
     assert "--core" in out and "--list-cores" in out
+
+
+def test_single_instance_second_launch_is_rejected() -> None:
+    """Two running copies meant two tray icons; the second launch must hand
+    over to the first and exit instead of spawning a duplicate."""
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtNetwork import QLocalServer
+
+    main_module = _load_main_module()
+    app = QCoreApplication.instance() or QCoreApplication([])
+
+    name = f"ktm-test-{os.getpid()}"
+    first = QLocalServer(app)
+    try:
+        assert main_module._acquire_single_instance(name, first) is True, (
+            "the first instance must acquire the single-instance lock"
+        )
+        second = QLocalServer(app)
+        assert main_module._acquire_single_instance(name, second) is False, (
+            "a second instance must be told to hand over, not start"
+        )
+        second.close()
+    finally:
+        first.close()
+        QLocalServer.removeServer(name)
