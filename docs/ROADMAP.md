@@ -158,11 +158,9 @@ src/
 - [ ] Вариант B: `pyo3` — нативный Python модуль, быстрее, но сложнее сборка
 - [x] Обновить `CoreFactory` для выбора `RustCore` vs `CliCore`
 
-#### Phase 3: Standalone Binary
-- [ ] `cargo build --release --bin kde-theme-manager`
-- [ ] Встроить QML ресурсы (`qrc` или `qt_resource`)
-- [ ] Single binary ~10-15 MB
-- [ ] Убрать Python dependency
+#### Phase 3: Standalone Binary — ❌ закрыто решением по архитектуре
+GUI остаётся 100% Python (PySide6 + QML), см. `AGENTS.md`
+(«Architecture decision»). Одиночный бинарь и удаление Python не планируются.
 
 #### Phase 4: Config Parsing (Native)
 - [ ] Парсинг INI (kwinrc, kdeglobals, gtk settings.ini) — `configparser` crate
@@ -235,8 +233,7 @@ plasma-applet/
 | v0.2.x | Python 3.11+, PySide6, uv | pip/uv | GitHub Releases |
 | v0.3.0 | + KNotification | | |
 | v0.5.0 | Python 3.11+, PySide6, Rust 1.75+ (default) | uv, cargo | GitHub Releases |
-| v0.5.0 | Rust polish, single binary | cargo + pip | Single binary |
-| v1.0.0 | C++17, Qt6, KDE Frameworks 6 | CMake, ECM | AUR, Flatpak, KDE Store |
+| v1.0.0+ | Python (PySide6 GUI) + Rust core/CLI (без C++-переписывания) | uv, cargo | GitHub Releases |
 
 ---
 
